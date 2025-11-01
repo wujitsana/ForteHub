@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/nicolas/Coding/flow-/cadence/**)",
+      "Read(//Users/nicolas/Coding/flow-/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

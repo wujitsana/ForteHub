@@ -1,0 +1,235 @@
+{
+	"contracts": {
+		"BandOracle": {
+			"source": "cadence/contracts/BandOracle.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "2c71de7af78d1adf",
+				"mainnet": "0x6801a6222ebf784a"
+			}
+		},
+		"BandOracleConnectors": {
+			"source": "cadence/contracts/BandOracleConnectors.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0x1a9f5d18d096cd7a",
+				"mainnet": "0xf627b5c89141ed99"
+				
+			}
+		},
+		"Burner": {
+			"source": "",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7"
+			}
+		},
+		"DeFiActions": {
+			"source": "cadence/contracts/DeFiActions.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0x2ab6f469ee0dfbb6",
+				"mainnet": "0x92195d814edf9cb0"
+			}
+		},
+		"DeFiActionsMathUtils": {
+			"source": "cadence/contracts/DeFiActionsMathUtils.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0x2ab6f469ee0dfbb6",
+				"mainnet": "0x92195d814edf9cb0"
+			}
+		},
+		"DeFiActionsUtils": {
+			"source": "cadence/contracts/DeFiActionsUtils.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0x2ab6f469ee0dfbb6",
+				"mainnet": "0x92195d814edf9cb0"
+			}
+		},
+		"FlowToken": {
+			"source": "",
+			"aliases": {
+				"emulator": "0ae53cb6e3f42a79",
+				"testnet": "0x7e60df042a9c0868",
+				"mainnet": "0x1654653399040a61"
+			}
+		},
+		"FlowTransactionScheduler": {
+			"source": "",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0x8c5303eaa26202d6",
+				"mainnet": "0xe467b9dd11fa00df"
+			}
+		},
+		"FlowTransactionSchedulerUtils": {
+			"source": "cadence/contracts/FlowTransactionSchedulerUtils.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0x8c5303eaa26202d6",
+				"mainnet": "0xe467b9dd11fa00df"
+			}
+		},
+		"ForteHubRegistry": {
+			"source": "cadence/contracts/ForteHubRegistry.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0xbd4c3996265ed830"
+			}
+		},
+		"FungibleToken": {
+			"source": "",
+			"aliases": {
+				"emulator": "ee82856bf20e2aa6",
+				"testnet": "0x9a0766d93b6608b7",
+				"mainnet": "0xf233dcee88fe0abe"
+			}
+		},
+		"FungibleTokenConnectors": {
+			"source": "cadence/contracts/FungibleTokenConnectors.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0x5a7b9cee9aaf4e4e",
+				"mainnet": "0x1d9a619393e9fb53"
+			}
+		},
+		"FungibleTokenMetadataViews": {
+			"source": "",
+			"aliases": {
+				"emulator": "ee82856bf20e2aa6",
+				"testnet": "0x9a0766d93b6608b7",
+				"mainnet": "0xf233dcee88fe0abe"
+			}
+		},
+		"IncrementFiSwapConnectors": {
+			"source": "cadence/contracts/IncrementFiSwapConnectors.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0x49bae091e5ea16b5",
+				"mainnet": "0xefa9bd7d1b17f1ed"
+
+			}
+		},
+		"StableSwapFactory": {
+			"source": "cadence/contracts/StableSwapFactory.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7"
+			}
+		},
+		"SwapConfig": {
+			"source": "cadence/contracts/SwapConfig.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7"
+			}
+		},
+		"SwapConnectors": {
+			"source": "cadence/contracts/SwapConnectors.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7"
+			}
+		},
+		"SwapError": {
+			"source": "cadence/contracts/SwapError.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7"
+			}
+		},
+		"SwapFactory": {
+			"source": "cadence/contracts/SwapFactory.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7"
+			}
+		},
+		"SwapInterfaces": {
+			"source": "cadence/contracts/SwapInterfaces.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7"
+			}
+		},
+		"SwapRouter": {
+			"source": "cadence/contracts/SwapRouter.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7"
+			}
+		},
+		"ViewResolver": {
+			"source": "",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0x631e88ae7f1d7c20"
+			}
+		},
+		"MetadataViews": {
+			"source": "",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "0x631e88ae7f1d7c20",
+				"mainnet": "0x1d7e57aa55817448"
+			}
+		}
+	},
+	"networks": {
+		"emulator": "127.0.0.1:3569",
+		"testing": "127.0.0.1:3569",
+		"testnet": "access.devnet.nodes.onflow.org:9000"
+	},
+	"accounts": {
+		"emulator-account": {
+			"address": "f8d6e0586b0a20c7",
+			"key": {
+				"type": "file",
+				"location": "./emulator-account.pkey"
+			}
+		},
+		"fortehub": {
+			"address": "bd4c3996265ed830",
+			"key": {
+				"type": "file",
+				"location": "fortehub.pkey"
+			}
+		},
+		"testnet-account": {
+			"address": "f8d6e0586b0a20c7",
+			"key": {
+				"type": "file",
+				"location": "./testnet-account.pkey"
+			}
+		}
+	},
+	"deployments": {
+		"emulator": {
+			"emulator-account": [
+				"DeFiActionsMathUtils",
+				"DeFiActionsUtils",
+				"DeFiActions",
+				"FungibleTokenConnectors",
+				"SwapConfig",
+				"StableSwapFactory",
+				"SwapError",
+				"SwapInterfaces",
+				"SwapConnectors",
+				{
+					"name": "SwapFactory",
+					"args": [
+						{
+							"value": "0xf8d6e0586b0a20c7",
+							"type": "Address"
+						}
+					]
+				},
+				"SwapRouter",
+				"ForteHubRegistry",
+				"IncrementFiSwapConnectors",
+				"BandOracle",
+				"BandOracleConnectors",
+				"FlowTransactionSchedulerUtils"
+			]
+		},
+		"testnet": {
+			"fortehub": [
+				"ForteHubRegistry"
+			]
+		}
+	}
+}

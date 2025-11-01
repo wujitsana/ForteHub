@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Sketchpad Light Theme - HSL Colors */
+    --background: 0 0% 100%;
+    --foreground: 240 5% 26%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 5% 26%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 5% 26%;
+    --primary: 240 5% 26%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 100%;
+    --secondary-foreground: 240 5% 26%;
+    --muted: 240 4% 95%;
+    --muted-foreground: 240 5% 26%;
+    --accent: 240 4% 95%;
+    --accent-foreground: 240 5% 26%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5% 26%;
+    --input: 240 5% 26%;
+    --ring: 240 5% 26%;
+    --chart-1: 240 5% 26%;
+    --chart-2: 240 4% 46%;
+    --chart-3: 0 0% 72%;
+    --chart-4: 0 0% 92%;
+    --chart-5: 0 0% 56%;
+    --radius: 0rem;
+  }
+
+  .dark {
+    /* Sketchpad Dark Theme - HSL Colors */
+    --background: 240 5% 15%;
+    --foreground: 0 0% 95%;
+    --card: 240 5% 15%;
+    --card-foreground: 0 0% 95%;
+    --popover: 240 5% 15%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 0 0% 95%;
+    --primary-foreground: 240 5% 15%;
+    --secondary: 240 5% 25%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 240 5% 25%;
+    --muted-foreground: 0 0% 70%;
+    --accent: 240 5% 25%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5% 30%;
+    --input: 240 5% 30%;
+    --ring: 0 0% 95%;
+    --chart-1: 240 5% 70%;
+    --chart-2: 240 4% 65%;
+    --chart-3: 0 0% 80%;
+    --chart-4: 0 0% 90%;
+    --chart-5: 0 0% 75%;
+    --radius: 0rem;
+  }
+
+  /* Debug: Force dark mode styles */
+  html.dark {
+    background-color: hsl(240 5% 15%) !important;
+    color: hsl(0 0% 95%) !important;
+  }
+
+  html.dark body {
+    background-color: hsl(240 5% 15%) !important;
+    color: hsl(0 0% 95%) !important;
+  }
+
+  * {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Courier New', monospace;
+  }
+
+  /* Sketchpad-specific styles */
+  .sketchpad-shadow {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  }
+
+  .sketchpad-shadow-lg {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  }
+
+  .dark .sketchpad-shadow {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  }
+
+  .dark .sketchpad-shadow-lg {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  }
+}

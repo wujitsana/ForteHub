@@ -1,0 +1,27 @@
+{
+  "name": "fortehub",
+  "version": "0.1.0",
+  "description": "ForteHub is a decentralized workflow automation platform for Flow blockchain that enables users to create, discover, deploy, and manage DeFi strategies without coding. ",
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd frontend && npm start",
+    "test": "flow test",
+    "emulator": "flow emulator start",
+    "deploy:emulator": "flow project deploy --network emulator",
+    "deploy:testnet": "flow project deploy --network testnet"
+  },
+  "keywords": [
+    "flow",
+    "blockchain",
+    "defi",
+    "cadence",
+    "swap",
+    "amm"
+  ],
+  "author": "wujitsana",
+  "license": "MIT",
+  "devDependencies": {
+    "@onflow/flow-cadut": "^0.2.0"
+  }
+}

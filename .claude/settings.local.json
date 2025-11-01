@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:developers.flow.com)",
+      "WebSearch",
+      "WebFetch(domain:react.flow.com)",
+      "Bash(npm install:*)",
+      "Bash(flow project deploy:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(flow emulator start:*)",
+      "Bash(pkill:*)",
+      "Bash(flow dev-wallet:*)",
+      "Bash(npm run build)",
+      "Bash(curl -s -o /dev/null -w \"Dashboard Status: %{http_code}\\nTime: %{time_total}s\\n\" http://localhost:3000/dashboard)",
+      "Bash(curl -s -o /dev/null -w \"Creator Status: %{http_code}\\nTime: %{time_total}s\\n\" http://localhost:3000/creator)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w \"Marketplace: %{http_code}\\n\" http://localhost:3000/marketplace)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "Bash(flow scripts execute:*)",
+      "WebFetch(domain:formulae.brew.sh)",
+      "WebFetch(domain:api.mixpanel.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "sandbox": {
+    "autoAllowBashIfSandboxed": true,
+    "enabled": true
+  }
+}
