@@ -1,0 +1,3 @@
+[submodule "frontend/cadence/FlowActions"]
+	path = frontend/cadence/FlowActions
+	url = https://github.com/onflow/FlowActions.git

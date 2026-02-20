@@ -74,5 +74,21 @@
       /return\s+([^\n]+?)!\s+as!\s+&([A-Za-z0-9_.]+)/g,
       'return $1!'
     );
+
+    // CRITICAL FIX: Remove invalid "destroy self.fieldName" patterns
+    // Cadence 1.0 only allows destroying local variables, not fields on self
+    // Pattern: destroy self.fieldName  →  // REMOVED: destroy self.fieldName
+    adjusted = adjusted.replace(
+      /destroy\s+self\.([a-zA-Z0-9_]+)/g,
+      (match, fieldName) => {
+        console.warn(`⚠️ Removed invalid destroy pattern: "${match}"`);
+        console.warn(`   Cadence 1.0 only allows destroying LOCAL variables, not fields on self.`);
+        console.warn(`   To destroy a resource field, first move it to a local variable:`);
+        console.warn(`   let ${fieldName} <- self.${fieldName}`);
+        console.warn(`   destroy ${fieldName}`);
+        return `// REMOVED: ${match}`;
+      }
+    );
+
     return adjusted;
   };

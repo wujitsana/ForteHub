@@ -48,12 +48,12 @@ export function validateWorkflowCode(sourceCode: string): ValidationResult {
   });
 
   if (hasJSImports) {
-    errors.push('❌ CRITICAL: Contract contains JavaScript/TypeScript code. This must be pure Cadence smart contract code ONLY. Remove all FCL, SDK, React imports and JavaScript syntax (const, async, await).');
+    errors.push('ERROR: Contract contains JavaScript/TypeScript code. This must be pure Cadence smart contract code ONLY. Remove all FCL, SDK, React imports and JavaScript syntax (const, async, await).');
   }
 
   // Workflows should NOT import FlowTransactionScheduler - that's Manager's responsibility
   if (sourceCode.includes('import FlowTransactionScheduler')) {
-    errors.push('❌ Workflow should NOT import FlowTransactionScheduler. Scheduling is handled by ForteHubManager, not individual workflows. Remove this import.');
+    errors.push('ERROR: Workflow should NOT import FlowTransactionScheduler. Scheduling is handled by ForteHub, not individual workflows. Remove this import.');
   }
 
   // Check for Cadence 1.0 syntax
@@ -78,28 +78,80 @@ export function validateWorkflowCode(sourceCode: string): ValidationResult {
   const hasDestroyMethod = destroyMethodPatterns.some(pattern => pattern.test(sourceCode));
 
   if (hasDestroyMethod) {
-    errors.push('❌ CRITICAL: Custom destroy() methods are FORBIDDEN in Cadence 1.0. Resources are automatically destroyed when they go out of scope. DO NOT define destroy() methods. If you have cleanup logic, create a separate function: access(all) fun cleanup() { } and call it explicitly.');
+    errors.push('ERROR: Custom destroy() methods are FORBIDDEN in Cadence 1.0. Resources are automatically destroyed when they go out of scope. DO NOT define destroy() methods. If you have cleanup logic, create a separate function: access(all) fun cleanup() { } and call it explicitly.');
   }
 
   // Also check for "destroy self.fields" pattern which is wrong
   if (/destroy\s+self\.\w+/.test(sourceCode)) {
-    errors.push('❌ CRITICAL: Cannot use "destroy self.fieldName" - fields are not resources. Only use destroy on local owned variables. Example: let vault <- withdraw(); destroy vault;');
+    errors.push('ERROR: Cannot use "destroy self.fieldName" - fields are not resources. Only use destroy on local owned variables. Example: let vault <- withdraw(); destroy vault;');
+  }
+
+  // Check for Swapper parameter order error (most common mistake)
+  // WRONG: swapper.swap(inVault: <-vault, quote: nil)
+  // RIGHT: swapper.swap(quote: nil, inVault: <-vault)
+  if (/\.swap\s*\(\s*inVault\s*:/.test(sourceCode)) {
+    errors.push('ERROR: Swapper.swap() parameter order is WRONG. The "quote" parameter must come FIRST, then "inVault". Change: swap(inVault: <-vault, quote: nil) -> swap(quote: nil, inVault: <-vault)');
+  }
+
+  if (/panic\s*\(/.test(sourceCode)) {
+    errors.push('ERROR: Remove placeholder panic() calls. Provide real implementation logic for swaps, quotes, and execution paths.');
+  }
+
+  const connectsDeFiActions = [
+    'VaultSource',
+    'VaultSink',
+    'SwapSource',
+    'Swapper',
+    'AutoBalancer',
+    'createUniqueIdentifier',
+    'DeFiActionsUtils',
+  ].some((token) => sourceCode.includes(token));
+
+  if (!connectsDeFiActions) {
+    errors.push('ERROR: Contract must leverage DeFiActions connectors (VaultSource, SwapSource, VaultSink, AutoBalancer) or createUniqueIdentifier() instead of custom placeholder structs.');
+  }
+
+  if (/import\s+"[^"]+"/.test(sourceCode)) {
+    errors.push('ERROR: Every import must specify the contract name, e.g., `import DeFiActions from 0x2ab6f469ee0dfbb6` - avoid bare string imports.');
+  }
+
+  if (!/import\s+[A-Za-z0-9_]+\s+from\s+0x/.test(sourceCode)) {
+    errors.push('ERROR: Include explicit Cadence import statements (for example, "import DeFiActions from 0x2ab6f469ee0dfbb6").');
+  }
+
+  if (!/import\s+DeFiActions\s+from\s+0x/.test(sourceCode)) {
+    errors.push('ERROR: Make sure to import DeFiActions from 0x2ab6f469ee0dfbb6 and use its helpers instead of placeholders.');
+  }
+
+  if (/access\(all\)\s+contract\s+[^\s{]+\s*:\s*/.test(sourceCode)) {
+    errors.push('ERROR: Workflow contract must be declared without inheritance or protocol conformance (for example, remove ": DeFiActions.Workflow"). Define a standalone access(all) contract and expose resources/functions within it.');
+  }
+
+  if (/^\s*transaction\s*\(/m.test(sourceCode)) {
+    errors.push('ERROR: Workflow contracts must expose Cadence resources/functions. Do not embed standalone transaction blocks inside the contract.');
   }
 
   // Check for resource implementation
   if (!sourceCode.includes('access(all) resource')) {
-    warnings.push('Workflow should be implemented as a resource for proper access control');
+    errors.push('ERROR: Workflow must declare an access(all) resource (for example, "access(all) resource Workflow") so ForteHub Manager can invoke it directly.');
+  }
+
+  // Check for factory function for resource creation
+  // Pattern: access(all) fun createWorkflow(...) -> @Workflow
+  // This is required for deployment and cloning
+  if (!/access\(all\)\s+fun\s+create\w+\s*\([^)]*\)\s*->\s*@/.test(sourceCode)) {
+    errors.push('ERROR: Workflow must have a factory function like "access(all) fun createWorkflow(...) -> @Workflow" to instantiate the resource during deployment and cloning. The factory function must return a resource with the @ operator.');
   }
 
   // Provide helpful info
   if (sourceCode.includes('Swapper')) {
-    info.push('✓ Uses Swapper Action for token exchanges');
+    info.push('Uses Swapper Action for token exchanges');
   }
   if (sourceCode.includes('PriceOracle')) {
-    info.push('✓ Uses PriceOracle for price data');
+    info.push('Uses PriceOracle for price data');
   }
   if (sourceCode.includes('emit')) {
-    info.push('✓ Emits events for operation tracking');
+    info.push('Emits events for operation tracking');
   }
 
   // Detect metadata block to help with scheduler validation
@@ -121,16 +173,16 @@ export function validateWorkflowCode(sourceCode: string): ValidationResult {
     }
   }
 
-  // In the centralized ForteHubManager architecture:
+  // In the centralized ForteHub architecture:
   // - Workflow contains ONLY strategy logic and strategy config fields
   // - executionFrequencySeconds is Manager-only (never in Workflow)
   // - Workflow should NOT have any scheduling fields
   if (/executionFrequencySeconds/.test(sourceCode)) {
-    errors.push('❌ Workflow should NOT contain executionFrequencySeconds field. This is managed by ForteHubManager, not the Workflow. Remove this field from the Workflow resource.');
+    errors.push('ERROR: Workflow should NOT contain executionFrequencySeconds field. This is managed by ForteHub, not the Workflow. Remove this field from the Workflow resource.');
   }
 
   if (/lastExecutionTime/.test(sourceCode)) {
-    errors.push('❌ Workflow should NOT contain lastExecutionTime field. This is managed by ForteHubManager, not the Workflow. Remove this field from the Workflow resource.');
+    errors.push('ERROR: Workflow should NOT contain lastExecutionTime field. This is managed by ForteHub, not the Workflow. Remove this field from the Workflow resource.');
   }
 
   // Detect common placeholder logic that should be replaced before production
@@ -150,7 +202,7 @@ export function validateWorkflowCode(sourceCode: string): ValidationResult {
     'DeFiActions.Flasher('
   ];
   if (forbiddenConstructors.some(pattern => sourceCode.includes(pattern))) {
-    errors.push('❌ CRITICAL: DeFiActions primitives must be injected via capabilities/structs. Do not call constructors like DeFiActions.Swapper(...). Pass concrete connectors into the workflow instead.');
+    errors.push('ERROR: DeFiActions primitives must be injected via capabilities/structs. Do not call constructors like DeFiActions.Swapper(...). Pass concrete connectors into the workflow instead.');
   }
 
   const usesPriceOracle = /PriceOracle/.test(sourceCode);

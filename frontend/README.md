@@ -41,6 +41,11 @@ Next.js 16 + React application for ForteHub - DeFi workflow automation platform 
   - Network-specific information
 - **Future Migration to MCPs**: Will replace hardcoded token list with dynamic queries to `flow-mcp` and `flow-defi-mcp` (see main README)
 
+**Clone Tickets & Payments:**
+- `lib/cloneTransaction.ts` withdraws exactly the listed price, calls `ForteHub.purchaseCloneTicket`, borrows the signer’s ForteHub manager, and passes both the restricted manager reference and ticket into `createWorkflow(...)` so the workflow contract can call `manager.acceptWorkflow(...)`. Resales use `manager.depositWorkflow(token: <-token)` instead of re-cloning.
+- Tickets ensure only managers that paid (or were issued a free ticket) can store the cloned workflow; refunds happen automatically on failure.
+- Discover list/detail pages both consume the shared `prepareCloneTransaction` helper so UI always follows the ticket flow without duplicate logic.
+
 ## Folder Structure
 
 ```
@@ -49,7 +54,7 @@ frontend/
 │   ├── app/                          # Next.js App Router
 │   │   ├── create/                   # Workflow creation UI
 │   │   │   └── page.tsx              # AI-powered form + deployment
-│   │   ├── browse/                   # Marketplace listing
+│   │   ├── discover/                   # Marketplace listing
 │   │   │   ├── page.tsx              # Public workflows grid
 │   │   │   └── [id]/                 # Workflow detail page
 │   │   │       └── page.tsx          # Creator controls, fork/clone
@@ -66,9 +71,10 @@ frontend/
 │   ├── lib/                          # Utilities & helpers
 │   │   ├── tokenRegistry.ts          # Token detection & network-aware imports
 │   │   ├── agentPrompt.ts            # LLM prompt generation with token detection
-│   │   ├── transactionStatus.ts      # Transaction sealing verification
 │   │   ├── forteHubManagerCode.ts    # Manager contract code string
 │   │   ├── deploymentTransaction.ts  # Deployment transaction builder
+│   │   ├── cloneTransaction.ts       # Clone transaction with smart payment handling
+│   │   ├── updateDescriptionWithValues.ts  # Auto-sync descriptions with parameters
 │   │   ├── ipfs.service.ts           # IPFS upload/fetch
 │   │   └── flow/                     # Flow SDK utilities
 │   │
@@ -96,53 +102,70 @@ frontend/
 - Form inputs for workflow strategy
 - Automatic token detection from user description
 - Source code generation via Claude AI (users copy prompt and paste generated code)
+- **NEW**: Clone pricing input (free or any amount in FLOW)
+- **NEW**: Real-time description sync (auto-updates description when parameters change)
 - **Deployment Flow**:
   1. User enters strategy (e.g., "FLOW-USDC rebalancer")
   2. Frontend detects tokens → generates LLM prompt with correct imports
   3. User copies prompt to Claude, pastes generated code
   4. Frontend validates Cadence syntax
-  5. Code uploaded to IPFS
-  6. One-atomic transaction deploys contract + registers in ForteHubRegistry
-  7. **NEW**: Frontend polls for transaction sealing (up to 60 seconds)
-  8. If sealed: Success modal with contract name, tx ID, Flowscan link
-  9. If error: Detailed error modal with troubleshooting steps
+  5. User sets clone price (default: free)
+  6. User adjusts default parameters
+  7. Description auto-updates to reflect parameter values
+  8. Code uploaded to IPFS
+  9. One-atomic transaction deploys contract + registers in ForteHubRegistry with price
+  10. **NEW**: Frontend polls for transaction sealing (up to 60 seconds)
+  11. If sealed: Success modal with contract name, tx ID, Flowscan link
+  12. If error: Detailed error modal with troubleshooting steps
 
 **Components**:
 - StrategyInput (user describes workflow)
 - CodePaste (user pastes generated Cadence)
 - ValidationFeedback (syntax checking)
+- PriceInput (clone price field - main form and review modal)
+- ParameterSync (real-time description updates)
 - DeploymentResultModal (success/detailed error with actual blockchain error)
 - TransactionStatusChecker (waits for sealing, extracts error messages)
 
-### Browse (`/browse`)
+### Discover (`/discover`)
 - Public workflow marketplace
 - Filter by category
 - Search by name
 - Clone/fork workflows
 - Shows clone count, fork count, creator info
+- **NEW**: Clone pricing displayed on cards (Free or {amount} FLOW)
+- **NEW**: Workflow thumbnail images with fallback to default coffee image
 
 **Components**:
-- WorkflowCard (grid item with metadata)
+- WorkflowCard (grid item with metadata, includes clone price and image thumbnail)
+  - Image: 128px height (h-32), full width, rounded corners
+  - Fallback: Default coffee image if custom image fails to load
 - CategoryFilter (dropdown/tabs)
 - SearchBar
-- DeployModal (clone confirmation)
+- DeployModal (clone confirmation with price handling)
+- Clone price shown prominently on each card
+- Image thumbnails displayed above description
 
-### Browse Detail (`/browse/[id]`)
+### Discover Detail (`/discover/[id]`)
 - Full workflow information
 - Source code link (IPFS)
 - Execution history (from indexer)
+- **NEW**: Clone pricing stat box (Free or {amount} FLOW)
+- **NEW**: Large workflow thumbnail image (256px height) with fallback
 - Creator controls (if logged in as creator)
   - **List/Unlist**: Toggle public visibility
   - **Reschedule**: Change execution frequency (placeholder)
-- Fork/clone button
+- Fork/clone button with smart payment handling
 - Metadata display (parameters, default values)
 
 **Components**:
 - WorkflowHeader (name, creator, stats)
+- WorkflowImage (full-width image display, h-64, with fallback to default coffee image)
+- PricingCard (Clone Price stat box)
 - CreatorControlsCard (list/unlist, reschedule modals)
 - WorkflowMetadata (parameter display)
 - ExecutionHistory (event-based metrics)
-- ForkModal (clone with custom parameters)
+- CloneModal (clone with smart payment handling)
 
 ### Dashboard (`/dashboard`)
 - User's deployed workflows
@@ -183,7 +206,7 @@ const response = await fetch('/api/flow-query', {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     cadence: `
-      import ForteHubRegistry from 0xbd4c3996265ed830
+      import ForteHubRegistry from 0xc2b9e41bc947f855
 
       access(all) fun main(): [UInt64] {
         return ForteHubRegistry.listPublicWorkflows()
@@ -204,14 +227,13 @@ import { useFlowQuery } from '@onflow/react-sdk';
 
 const { data: workflows, isLoading } = useFlowQuery({
   cadence: `
-    import ForteHubRegistry from 0xbd4c3996265ed830
+    import ForteHubRegistry from 0xc2b9e41bc947f855
 
     access(all) fun main(): [UInt64] {
       return ForteHubRegistry.listPublicWorkflows()
     }
   `,
   query: {
-    queryKey: ['public-workflows'],
     staleTime: 30000  // Cache for 30 seconds
   }
 });
@@ -245,7 +267,7 @@ deploy({
 ### Deployment Transaction (`deploymentTransaction.ts`)
 
 One-atomic transaction that:
-1. Deploys ForteHubManager contract (if user's first time)
+1. Deploys ForteHub contract (if user's first time)
 2. Sets up required vaults (FLOW, USDC, custom tokens)
 3. Deploys workflow contract to user's account
 4. Registers workflow in ForteHubRegistry
@@ -271,9 +293,160 @@ Maps token names to storage paths:
 
 Only FLOW is required by default; workflow can specify additional tokens.
 
+### Description Parameter Sync (`updateDescriptionWithValues()`)
+
+**File**: `lib/updateDescriptionWithValues.ts`
+
+**Purpose**: Auto-sync workflow descriptions with current parameter values. When creators edit default parameters in the review modal, descriptions update in real-time to reflect the new values.
+
+**Key Features**:
+- **Percentage updates**: `flowTargetPercent: "0.75"` replaces "60% FLOW" with "75% FLOW"
+- **Time conversions**: `defaultFrequency: "7200"` converts "7200 seconds" to "2 hours" or "every 2 hours"
+- **Threshold updates**: Updates decimal values like `liquidityThreshold: "0.05"`
+- **Amount updates**: Updates token amounts in descriptions
+
+**Integration in Create Page**:
+```typescript
+// useEffect monitors parameter changes
+useEffect(() => {
+  if (!isReviewModalOpen || !reviewDescription) return;
+
+  const paramValues = {
+    ...metadataOverrides.defaultParameters,
+    defaultFrequency: metadataOverrides.defaultFrequency || ''
+  };
+
+  const updatedDescription = updateDescriptionWithValues(reviewDescription, paramValues);
+  if (updatedDescription !== reviewDescription) {
+    setReviewDescription(updatedDescription);
+  }
+}, [metadataOverrides.defaultParameters, metadataOverrides.defaultFrequency, isReviewModalOpen]);
+```
+
+**Pattern Matching**:
+- Percentages: `\d+\s*%?` (e.g., "60%", "0.60")
+- Time values: `\d+\s+(seconds?|hours?|days?)` (e.g., "3600 seconds", "1 hour")
+- Thresholds: `\d+\.\d*` (e.g., "0.05")
+- Smart conversion logic for time (3600s → 1h, 86400s → 1d)
+
+**User Experience**:
+1. Creator enters default parameters in main form
+2. Opens review modal
+3. Edits a parameter value (e.g., flowTargetPercent from 0.60 to 0.75)
+4. Description updates instantly: "targeting 60% FLOW" → "targeting 75% FLOW"
+5. Creator sees final description before deployment
+6. Deployed description reflects creator's intent
+
+### NFT Metadata & Workflow Images
+
+**Feature**: Workflows can have custom IPFS images displayed on marketplace cards and detail pages.
+
+**Default Image**: `https://coffee-solid-parakeet-145.mypinata.cloud/ipfs/bafybeib6okpp5ullxvjqe6n4wmmnnd4guks4buk5gluy5lnymwugrjpyzq`
+
+**Frontend Implementation**:
+
+1. **Create Page** (`src/app/create/page.tsx`):
+   - Optional `imageIPFS` input field in main form
+   - Optional `imageIPFS` input field in review modal
+   - Default placeholder shows coffee image URL
+   - User can paste IPFS URL for custom image
+
+2. **Discover Cards** (`src/app/discover/page.tsx`):
+   - Image thumbnail displayed above card description
+   - Dimensions: Full width, 128px height (h-32 Tailwind class)
+   - Rounded corners with proper aspect ratio
+   - Error handling: Falls back to default coffee image if custom image fails to load
+
+3. **Detail Page** (`src/app/discover/[id]/page.tsx`):
+   - Large image displayed prominently below header
+   - Dimensions: Full width, 256px height (h-64 Tailwind class)
+   - Positioned above workflow description
+   - Same fallback error handling as cards
+
+**Image Error Handling**:
+```typescript
+<img
+  src={workflow.imageIPFS}
+  alt={workflow.name}
+  className="w-full h-32 object-cover rounded-md"
+  onError={(e) => {
+    e.currentTarget.src = 'https://coffee-solid-parakeet-145.mypinata.cloud/ipfs/bafybeib6okpp5ullxvjqe6n4wmmnnd4guks4buk5gluy5lnymwugrjpyzq';
+  }}
+/>
+```
+
+**Best Practices**:
+- Image dimensions: 400x300px or larger (will be resized responsively)
+- File format: PNG, JPG, WebP
+- File size: <2MB recommended for fast loading
+- Aspect ratio: 4:3 (landscape) recommended for card thumbnails
+- Store on IPFS via Pinata for content-addressed persistence
+
+**Deployment Flow**:
+1. User optionally uploads image to IPFS (or provides IPFS URL)
+2. User enters image URL in create form (optional)
+3. Image URL passed to deployment transaction as `imageIPFS` parameter
+4. ForteHubRegistry stores imageIPFS in WorkflowInfo struct
+5. Discover pages query registry and display image with fallback
+
+### Clone Pricing System
+
+**Architecture**: Creators can set a FLOW price for cloning their workflows.
+
+**Smart Payment Handling**:
+- Clone transaction queries workflow price from registry
+- If price = 0 or null → free clone (no payment)
+- If price > 0 → Only withdraws exact FLOW amount needed from cloner's vault
+- Prevents accidental large transfers by checking balance first
+- Payment fails early if insufficient balance (before withdrawal)
+
+**Frontend Files**:
+
+**`lib/cloneTransaction.ts`**:
+```typescript
+// Get workflow price from registry
+let workflowInfo = ForteHub.getWorkflowInfo(workflowId: workflowId)
+  ?? panic("Workflow not found")
+
+// Smart payment handling
+var paymentVault: @FlowToken.Vault? <- nil
+
+if let price = workflowInfo.price {
+  if price > 0.0 {
+    // Only withdraw exact price amount
+    let flowVault = signer.storage.borrow<auth(FungibleToken.Withdraw) &FlowToken.Vault>(...)
+    let withdrawn <- flowVault.withdraw(amount: price)
+    paymentVault <-! withdrawn
+  }
+}
+
+// Rest of clone logic...
+```
+
+**UI Components**:
+- **Discover cards**: Show "Free" or "{amount} FLOW" on each workflow card
+- **Discover detail**: "Clone Price" stat box showing cost
+- **Create page**:
+  - `clonePrice` input field in main form (default: "0")
+  - `clonePrice` input field in review modal
+  - Price shown in deployment summary
+
+**Data Flow**:
+1. Creator sets `clonePrice` when deploying workflow
+2. Price stored in WorkflowInfo struct in registry
+3. Discover pages query registry and display price
+4. Cloner's clone transaction checks price before execution
+5. Smart withdrawal only takes exact amount needed
+6. Payment transferred to creator's account
+
+**Use Cases**:
+- Free: Community strategies, templates
+- Paid: Advanced yield strategies, specialized bots
+- Freemium: Multiple versions at different price points
+
 ### Execution Tracking
 
-Events emitted by ForteHubManager on execution:
+Events emitted by ForteHub on execution:
 ```cadence
 event WorkflowExecuted(
   workflowId: UInt64,
@@ -317,7 +490,8 @@ Pre-built, accessible components used throughout:
 **`.env.local`** (required for testing):
 ```env
 # Flow Network
-NEXT_PUBLIC_FORTEHUB_REGISTRY=0xbd4c3996265ed830
+# NEXT_PUBLIC_FLOW_NETWORK=testnet
+NEXT_PUBLIC_FORTEHUB_REGISTRY=0xc2b9e41bc947f855
 NEXT_PUBLIC_NETWORK=testnet
 
 # Optional: IPFS Gateway (defaults to gateway.pinata.cloud)
@@ -404,6 +578,17 @@ npm run lint:fix
 4. **LLM Code Generation**: AI prompt UI ready; users manually paste Claude-generated code
 5. **Advanced Connectors**: DeFi primitives (swap, oracle) referenced in prompt, full MCP integration deferred
 
+### Completed Features (Phase 8)
+- ✅ Clone pricing system (price field in registry, smart payment handling)
+- ✅ Clone pricing UI (discovery cards + detail pages show prices)
+- ✅ Clone price input on create page (main form + review modal)
+- ✅ Description parameter sync utility (auto-update descriptions when parameters change)
+- ✅ WorkflowInfo consolidation (cloneCount and forkCount in struct, removed separate dictionaries)
+- ✅ NFT metadata image field (imageIPFS in WorkflowInfo struct)
+- ✅ Workflow image thumbnails on discover cards (128px height with fallback)
+- ✅ Workflow image display on detail page (256px height with fallback)
+- ✅ Image input fields on create page (main form + review modal)
+
 ### Blockchain Limitations
 - **Scheduler only on testnet**: FlowTransactionScheduler available testnet only
 - **No arbitrary Cadence templates**: Security requires pre-validated patterns
@@ -465,7 +650,7 @@ npm run lint:fix
 
 ## Debugging Tips
 
-### Browser DevTools
+### Discoverr DevTools
 1. Open Chrome DevTools (F12)
 2. Look for Flow SDK logs in Console
 3. Check Network tab for `/api/flow-query` requests
@@ -489,7 +674,7 @@ npm run lint:fix
 ### Commit Messages
 ```
 feat: Add reschedule modal to workflow detail page
-fix: Correct MetadataViews import on browse page
+fix: Correct MetadataViews import on discover page
 docs: Update API endpoint documentation
 refactor: Extract workflow query logic to hook
 ```

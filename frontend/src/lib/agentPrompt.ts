@@ -38,7 +38,7 @@ export function buildWorkflowPrompt(params: WorkflowPromptParams): string {
 
   return `Generate a Cadence contract with ONLY a Workflow resource inside.
 - MUST: \`access(all) contract Name { resource Workflow { ... } }\`
-- DO NOT: ForteHubManager, transactions, scripts
+- DO NOT: ForteHub, transactions, scripts
 
 Strategy: ${strategy}
 ${description ? `Requirements: ${description}` : ''}
@@ -96,7 +96,7 @@ let newVault <- FlowToken.createEmptyVault(vaultType: Type<@FlowToken.Vault>())
 Pattern 3 - Conditional (use ternary):
 \`\`\`cadence
 let finalAmount: UFix64 = available >= needed ? available : needed
-let status: String = isPaused ? "paused" : "running"
+let adjustedPercent: UFix64 = targetPercent > 1.0 ? 1.0 : targetPercent
 \`\`\`
 
 Pattern 4 - Optional Binding:
@@ -121,10 +121,10 @@ access(all) fun run() {
 
 Pattern 6 - In init():
 \`\`\`cadence
-init(id: UInt64, flowSource: FungibleTokenConnectors.VaultSource) {
+init(id: UInt64, flowSource: FungibleTokenConnectors.VaultSource, targetPercent: UFix64) {
   self.id = id
   self.flowSource = flowSource
-  self.isPaused = false
+  self.targetPercent = targetPercent
 }
 \`\`\`
 
@@ -145,13 +145,34 @@ CRITICAL: NO scheduling in workflow name.
 3. Before submitting: search for every \`let\`/\`var\` and verify = or <- exists
 4. Common misses: conditionals (use ternary), prices (initialize), vault amounts (use minimumAvailable())
 
-## Architecture
+## Architecture & Factory Function Pattern
 
+**Workflow Lifecycle:**
+1. **Contract**: Your generated contract exports a Workflow resource
+2. **Factory**: Contract has createWorkflow(workflowId: UInt64, config: {String: AnyStruct}, manager: &{ForteHub.WorkflowAcceptance}, ticket: @ForteHub.CloneTicket?) and MUST call manager.acceptWorkflow(workflowId: workflowId, workflow: <-workflow, ticket: <-ticket) to deposit it (nothing is returned). Ticket can be nil when the creator clones their own workflow.
+3. **Deployment**: Stage 1 (DEPLOY_WORKFLOW_TRANSACTION) deploys the contract, sets up vaults, registers metadata, and optionally schedules. Stage 2 is a per-workflow factory transaction that imports your contract and calls createWorkflow(...) (with ticket: <-nil for creators) so the resource is stored in the Manager exactly like any future clone.
+4. **Execution**: ForteHub calls resource.run() (manual or scheduled via scheduling control)
+5. **Configuration**: User can update strategy parameters and enable/disable scheduling
+
+**Why Factory Function?**
+- Workflow resources cannot exist without being instantiated
+- Deployment Stage 2 and every clone transaction need to create the instance and store it in ForteHub
+- Standardized signature lets ForteHub supply config defaults + user overrides on-chain
+- Required for both manual execution and scheduled workflows
+
+**Resource Pattern Benefits:**
+- State isolation (each workflow is independent)
+- Lifecycle management (workflow can be deleted/destroyed)
+- Configuration (strategy parameters like target percentages)
+- Future composition (workflows can coordinate via stored resources)
+
+**Important:**
 - Workflow is a resource containing BUSINESS LOGIC ONLY
-- ForteHubManager (separate contract) handles scheduling, storage, lifecycle
+- ForteHub (separate contract) handles scheduling, storage, lifecycle
 - All dependencies (connectors) are INJECTED via init() - DO NOT create them
 - Workflow has NO awareness of when/if it runs - Manager handles this
 - Workflow.run() is pure strategy execution, no timing logic
+- `config` dictionary keys are Strings and values are AnyStruct. Cast each value to the concrete type you need (e.g. `let amount = (config["dcaAmount"] as? UFix64) ?? 1.0`). Never assume the key exists—fallback to safe defaults.
 
 ## OFFICIAL REFERENCES - READ THESE IF CODE FAILS TO COMPILE
 
@@ -184,7 +205,7 @@ ${requiredImports}
 
 **CRITICAL**:
 - Use EXACTLY these imports - do NOT add others or guess addresses
-- Do NOT add FlowTransactionScheduler (ForteHubManager handles scheduling)
+- Do NOT add FlowTransactionScheduler (ForteHub handles scheduling)
 - Add optional imports only if needed:
   - DeFiActions (REQUIRED for rebalancing): \`import DeFiActions from 0x2ab6f469ee0dfbb6\`
   - Oracle: \`import BandOracleConnectors from 0x1a9f5d18d096cd7a\`
@@ -246,9 +267,10 @@ access(all) contract FLOWUSDCRebalancer {
 \`\`\`cadence
 access(all) contract YourWorkflowName {
   access(all) resource Workflow {
-    // REQUIRED FIELDS - NO = assignment on field declaration!
+    // REQUIRED FIELDS FOR ForteHub.IWorkflow INTERFACE - NO = assignment on field declaration!
     access(all) let id: UInt64
-    access(all) var isPaused: Bool
+    access(all) let name: String
+    access(all) let category: String
 
     // OPTIONAL: Strategy-specific config (percentages, thresholds)
     access(all) var flowTargetPercent: UFix64
@@ -256,23 +278,59 @@ access(all) contract YourWorkflowName {
     // init() function - initialization happens HERE
     init(
       id: UInt64,
+      name: String,
+      category: String,
       flowTargetPercent: UFix64
     ) {
       self.id = id
-      self.isPaused = false
+      self.name = name
+      self.category = category
       self.flowTargetPercent = flowTargetPercent
     }
 
-    // Methods OUTSIDE init() - not inside it!
+    // REQUIRED METHODS FOR ForteHub.IWorkflow INTERFACE
     access(all) fun run() {
-      if self.isPaused { return }
       // Rebalancing logic: withdraw/deposit from user vaults based on flowTargetPercent
       // Use account.storage.borrow() to access vaults, then transfer tokens
     }
 
-    access(account) fun pause() { self.isPaused = true }
-    access(account) fun resume() { self.isPaused = false }
+    // Strategy setters with access(account) control
+    access(account) fun setFlowTargetPercent(val: UFix64) {
+      pre { val > 0.0 && val < 1.0: "Target must be 0-100%" }
+      self.flowTargetPercent = val
+    }
   }
+
+  // ============ CRITICAL REQUIREMENT ============
+  // MUST IMPLEMENT: Factory function to create workflow instances
+  // This function is called during deployment/cloning to instantiate the workflow from this contract
+  // SIGNATURE MUST MATCH EXACTLY - takes (workflowId, config, manager acceptance ref, clone ticket)
+  // CALLER: Clone transaction passes its ForteHub manager reference + clone ticket so this function
+  // can immediately deposit the workflow via manager.acceptWorkflow(). DO NOT return the resource.
+  access(all) fun createWorkflow(
+    workflowId: UInt64,
+    config: {String: AnyStruct},
+    manager: &{ForteHub.WorkflowAcceptance},
+    ticket: @ForteHub.CloneTicket?
+  ) {
+    let name = (config["name"] as? String) ?? "Rebalancer"
+    let category = (config["category"] as? String) ?? "rebalancing"
+    let flowTargetPercent = (config["flowTargetPercent"] as? UFix64) ?? 0.6
+
+    let workflow <- create Workflow(
+      id: workflowId,
+      name: name,
+      category: category,
+      flowTargetPercent: flowTargetPercent
+    )
+
+    manager.acceptWorkflow(
+      workflowId: workflowId,
+      workflow: <-workflow,
+      ticket: <-ticket
+    )
+  }
+  // ===============================================
 }
 \`\`\`
 
@@ -301,7 +359,7 @@ Reference:
 - Use \`let\` for immutable fields (set once in init(), never change):
   - Example: \`access(all) let id: UInt64\` (set once, never changes)
 - Use \`var\` for mutable fields (can be changed via setter functions or during run()):
-  - Example: \`access(all) var isPaused: Bool\` (toggled by pause/resume)
+  - Example: \`access(all) var flowTargetPercent: UFix64\` (updated by strategy setter)
 - WRONG: \`access(all) let flowTargetPercent: UFix64\` then try to reassign in run() → COMPILE ERROR!
 - RIGHT: \`access(all) var flowTargetPercent: UFix64\` (use var for anything that changes)
 
@@ -333,7 +391,6 @@ init(flowPercent: UFix64, usdcPercent: UFix64) {
 
   self.flowPercent = flowPercent
   self.usdcPercent = usdcPercent
-  self.isPaused = false
 
   post {
     self.flowPercent == flowPercent: "Flow % not saved"
@@ -343,8 +400,7 @@ init(flowPercent: UFix64, usdcPercent: UFix64) {
 
 // Most functions: NO pre/post, just assert inside
 access(all) fun run() {
-  if self.isPaused { return }
-  // strategy code here
+  // Check balances and execute strategy logic
   assert(result > 0.0, message: "Result must be positive")
 }
 \`\`\`
@@ -355,6 +411,25 @@ Key rules:
 - One condition per line: \`condition: "message"\`
 - NO && or code inside pre/post blocks
 - Most functions should have NO pre/post blocks at all
+
+## 🚨 CRITICAL: SWAPPER PARAMETER ORDER 🚨
+
+**IncrementFiSwapConnectors.Swapper.swap() signature**:
+\`\`\`cadence
+fun swap(quote: {DeFiActions.Quote}?, inVault: @{FungibleToken.Vault}): @{FungibleToken.Vault}
+\`\`\`
+
+**EXACT CORRECT CALL (parameter order MATTERS)**:
+\`\`\`cadence
+let outputVault <- self.swapper.swap(quote: nil, inVault: <-inputVault)
+\`\`\`
+
+**WRONG** (WILL NOT COMPILE):
+- \`self.swapper.swap(inVault: <-vault, quote: nil)\` ❌ WRONG ORDER
+- \`self.swapper.swap(<-vault, nil)\` ❌ POSITIONAL ARGS WRONG ORDER
+- \`self.swapper.swap(inVault: &vault, quote: nil)\` ❌ WRONG: use \`<-\` not \`&\`
+
+**RULE: \`quote\` parameter ALWAYS comes FIRST, then \`inVault\`**
 
 ## DeFi OPERATIONS PATTERN
 
@@ -367,7 +442,8 @@ Key rules:
 
 **With swap**:
 1. Withdraw: \`let inVault <- source.withdrawAvailable(...)\`
-2. Swap (consumes inVault): \`let outVault <- swapper.swap(quote: nil, inVault: <-inVault)\`
+2. **Swap (PARAMETER ORDER CRITICAL)**: \`let outVault <- swapper.swap(quote: nil, inVault: <-inVault)\`
+   - NOTE: \`quote\` parameter FIRST, \`inVault\` parameter SECOND
 3. Deposit with proper casting: \`sink.depositCapacity(from: &outVault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})\`
 4. Assert & destroy: \`assert(outVault.balance == 0.0, message: "Residual"); destroy outVault\`
 
@@ -438,7 +514,7 @@ access(all) resource Workflow {
 }
 \`\`\`
 
-**Why injection?** Capabilities issued at deploy, pre-authorized, more secure, ForteHubManager handles passing
+**Why injection?** Capabilities issued at deploy, pre-authorized, more secure, ForteHub handles passing
 
 ## AUTOBALANCER USAGE - REQUIRED FOR REBALANCING
 
@@ -470,7 +546,6 @@ access(all) resource Workflow {
   }
 
   access(all) fun run() {
-    if self.isPaused { return }
     // AutoBalancer manages oracle and rebalancing internally
     self.autoBalancer.rebalance(force: true)
   }
@@ -509,7 +584,29 @@ access(all) resource Workflow {
 
 **Import only if needed**: Complex math only. Simple rebalancing (multiply by percents) uses native UFix64.
 
-## CONFIGURABLE FIELDS & STRATEGY PARAMETERS
+## CONFIGURABLE FIELDS & STRATEGY PARAMETERS - WHERE DO THEY LIVE?
+
+**Architecture**: Config fields are INSTANCE-level data stored in the Workflow resource itself:
+- **In Workflow Resource**: Each deployed workflow instance has its own config field values (frozen at clone time)
+- **In Registry Template**: Registry stores the SCHEMA (field definitions, defaults, min/max)
+- **Instance Isolation**: When cloners copy a workflow, they get a snapshot of current defaults from Registry
+- **Future Updates**: If creator updates defaults in Registry, future cloners get new values; existing clones keep their snapshot
+- **Setter Functions**: Users can change instance config via \`access(account) fun setParameterName()\` methods
+
+**Pattern**:
+\`\`\`cadence
+resource Workflow {
+  access(all) var flowTargetPercent: UFix64  // Instance config (can change)
+
+  init(flowTargetPercent: UFix64) {
+    self.flowTargetPercent = flowTargetPercent  // Initialize with value passed at clone time
+  }
+
+  access(account) fun setFlowTargetPercent(val: UFix64) {
+    self.flowTargetPercent = val  // User can update this
+  }
+}
+\`\`\`
 
 **What Goes in configFields**:
 Based on user requirements, include ONLY fields that users should be able to change after deployment:
@@ -628,6 +725,10 @@ resource Workflow {
 
 ## CRITICAL ANTI-PATTERNS
 
+- **SWAPPER PARAMETER ORDER** - MOST COMMON ERROR:
+  - WRONG: \`swapper.swap(inVault: <-vault, quote: nil)\` ❌ WILL NOT COMPILE - wrong parameter order!
+  - RIGHT: \`swapper.swap(quote: nil, inVault: <-vault)\` ✅ quote FIRST, inVault SECOND
+  - The \`quote\` parameter MUST come before \`inVault\` - order matters!
 - **REBALANCING**: If user says "rebalance X% A, Y% B", MUST use AutoBalancer (import DeFiActions). WRONG: manual VaultSource/VaultSink loops. RIGHT: self.autoBalancer.rebalance(targetPercent: ...)
 - NO custom \`destroy()\` methods - Cadence 1.0 will not compile!
   - WRONG: \`fun destroy() { ... }\`
@@ -738,6 +839,37 @@ Currently: just pass empty capabilities dict to registry. In v2, this metadata w
 
 For MVP: focus on the strategy logic. Composition infrastructure is ready when you need it.
 
+## FEASIBILITY ASSESSMENT - CRITICAL
+
+**BEFORE you generate code, ASSESS whether the workflow is feasible:**
+
+A workflow is **INFEASIBLE** if:
+1. **Required tokens are NOT available on Flow Testnet**
+   - Example: User requests "Polygon USDC rebalancer" but USDC only exists on Ethereum
+   - Example: User requests "Bitcoin swap" but BTC is not available on Flow
+   - Solution: Check if ALL tokens mentioned are in AVAILABLE TOKENS FOR THIS STRATEGY section
+   - If tokens don't exist: Return infeasibility response with explanation
+
+2. **The strategy logic CANNOT be implemented with available connectors**
+   - Example: "Lend on Aave" but only have VaultSource/VaultSink available (no lending protocols)
+   - Example: "Earn 20% APY" but Flow protocols don't offer that yield
+   - Solution: Only use available connectors: VaultSource, VaultSink, Swapper, AutoBalancer, PriceOracle
+   - If logic cannot be implemented: Return infeasibility response with explanation
+
+3. **The strategy is fundamentally impossible**
+   - Example: "Print money" or "guaranteed 50% returns"
+   - Example: "Trade on a closed exchange"
+   - Solution: Return infeasibility response explaining why
+
+4. **Ambiguous or missing critical parameters**
+   - Example: "Rebalance FLOW and USDC" - missing target percentages entirely
+   - Example: "Swap tokens" - missing which tokens to swap between
+   - Solution: Return infeasibility response asking for clarification
+
+**If workflow is FEASIBLE**: Generate full code and return SUCCESS response (format below)
+
+**If workflow is INFEASIBLE**: Return INFEASIBILITY response (explain why, suggest alternatives)
+
 ## RESPONSE FORMAT (VALID JSON ONLY)
 
 \`\`\`json
@@ -770,6 +902,33 @@ For MVP: focus on the strategy logic. Composition infrastructure is ready when y
 - \`isSchedulable\`: true/false
 - \`defaultFrequency\`: only if isSchedulable=true (in seconds)
 
+### INFEASIBILITY RESPONSE (if workflow is not possible)
+
+If the workflow is **not feasible**, return this format instead:
+
+\`\`\`json
+{
+  "feasible": false,
+  "reason": "Why the workflow cannot be implemented",
+  "details": "Specific explanation of the issue",
+  "suggestion": "Alternative approach or clarification needed",
+  "suggestedDescription": "A modified version of the user's request that IS feasible and uses only available tokens/connectors. This should be a complete, executable strategy description that the user can use to regenerate."
+}
+\`\`\`
+
+Example:
+\`\`\`json
+{
+  "feasible": false,
+  "reason": "Required token not available on Flow Testnet",
+  "details": "USDT is available on Flow mainnet, but the strategy requires it on testnet where it's not deployed yet",
+  "suggestion": "Use fuUSDT (wrapped USDT) instead, or rebalance between FLOW and USDCFlow which are both available.",
+  "suggestedDescription": "Rebalance between FLOW and USDCFlow, targeting 60% FLOW and 40% USDCFlow, with a 5% drift threshold before triggering rebalancing. Can be scheduled daily."
+}
+\`\`\`
+
+**CRITICAL**: Always provide \`suggestedDescription\` in infeasibility responses. This allows the user to click a button and regenerate using your suggestion, turning an infeasible request into a feasible workflow.
+
 ## CRITICAL FINAL INSTRUCTION FOR \`contractCode\`
 
 The value of the \`contractCode\` key MUST be a complete, valid Cadence contract as a string:
@@ -801,8 +960,8 @@ This error happened with \`let usdcPrice: UFix64\` before - prevent it by verify
 - NO = in field declarations (initialize only in init())
 - NO direct assignment to access(self) fields (use setter methods)
 - NO default arguments in init() signatures
-- Immutable fields: use \`let\` (id, config)
-- Mutable fields: use \`var\` (percentages, isPaused)
+- Immutable fields: use \`let\` (id, name, category)
+- Mutable fields: use \`var\` (percentages, thresholds, configuration values)
 - Use config struct for configurable values
 - All mentioned tokens included (imports match description)
 
@@ -824,14 +983,19 @@ This error happened with \`let usdcPrice: UFix64\` before - prevent it by verify
 **Resources & DeFi**:
 - NO custom destroy() methods
 - Only destroy local owned resources
-- NEVER destroy fields (\`destroy self.fieldName\` forbidden)
+- **CRITICAL: NEVER destroy fields** (\`destroy self.fieldName\` FORBIDDEN - will not compile!)
+  - WRONG: \`destroy self.vault\`
+  - WRONG: \`destroy self.token\`
+  - RIGHT: \`let vault <- self.vault; destroy vault\`
+  - RIGHT: Let resources destroy automatically when function ends
 - Check availability & capacity before operations
 - Assert balance == 0.0 before destroy (local only)
 - Use only: minimumAvailable, withdrawAvailable, minimumCapacity, depositCapacity
+- **Swapper.swap() parameter order CRITICAL**: \`swap(quote: nil, inVault: <-vault)\` NOT \`swap(inVault: <-vault, quote: nil)\`
 - Swapper only: quoteIn, quoteOut, swap, swapBack
 
 **Scheduler & Manager**:
-- NO scheduler fields or imports (ForteHubManager handles it)
+- NO scheduler fields or imports (ForteHub handles it)
 - All fields initialized in init()
 
 **Conditions & Oracles**:

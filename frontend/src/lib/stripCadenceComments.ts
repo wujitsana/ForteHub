@@ -1,6 +1,6 @@
 /**
  * Strip comments from Cadence code before IPFS deployment
- * Removes both block comments (/* */) and line comments (//)
+ * Removes both block comments and line comments
  */
 export function stripCadenceComments(code: string): string {
   let result = '';

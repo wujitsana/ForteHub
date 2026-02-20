@@ -38,7 +38,7 @@ export function buildWorkflowPrompt(params: WorkflowPromptParams): string {
 
   return `Generate a Cadence contract with ONLY a Workflow resource inside.
 - MUST: \`access(all) contract Name { resource Workflow { ... } }\`
-- DO NOT: ForteHubManager, transactions, scripts
+- DO NOT: ForteHub, transactions, scripts
 
 Strategy: ${strategy}
 ${description ? `Requirements: ${description}` : ''}
@@ -148,7 +148,7 @@ CRITICAL: NO scheduling in workflow name.
 ## Architecture
 
 - Workflow is a resource containing BUSINESS LOGIC ONLY
-- ForteHubManager (separate contract) handles scheduling, storage, lifecycle
+- ForteHub (separate contract) handles scheduling, storage, lifecycle
 - All dependencies (connectors) are INJECTED via init() - DO NOT create them
 - Workflow has NO awareness of when/if it runs - Manager handles this
 - Workflow.run() is pure strategy execution, no timing logic
@@ -184,7 +184,7 @@ ${requiredImports}
 
 **CRITICAL**:
 - Use EXACTLY these imports - do NOT add others or guess addresses
-- Do NOT add FlowTransactionScheduler (ForteHubManager handles scheduling)
+- Do NOT add FlowTransactionScheduler (ForteHub handles scheduling)
 - Add optional imports only if needed:
   - DeFiActions: \`import DeFiActions from 0x2ab6f469ee0dfbb6\`
   - Oracle: \`import BandOracleConnectors from 0x1a9f5d18d096cd7a\`
@@ -418,7 +418,7 @@ access(all) resource Workflow {
 }
 \`\`\`
 
-**Why injection?** Capabilities issued at deploy, pre-authorized, more secure, ForteHubManager handles passing
+**Why injection?** Capabilities issued at deploy, pre-authorized, more secure, ForteHub handles passing
 
 ## AUTOBALANCER USAGE
 
@@ -815,7 +815,7 @@ This error happened with \`let usdcPrice: UFix64\` before - prevent it by verify
 - Swapper only: quoteIn, quoteOut, swap, swapBack
 
 **Scheduler & Manager**:
-- NO scheduler fields or imports (ForteHubManager handles it)
+- NO scheduler fields or imports (ForteHub handles it)
 - All fields initialized in init()
 
 **Conditions & Oracles**:

@@ -1,48 +1,18 @@
-`use client`;
+/**
+ * Workflow Data Transformation Utilities
+ *
+ * Pure utility functions for transforming and parsing workflow data.
+ * These do NOT interact with blockchain - just data transformation.
+ *
+ * NOTE: FORTEHUB_REGISTRY env var used directly in Cadence strings.
+ * FCL configuration handled by FlowProvider in FlowProviderWrapper.
+ * Blockchain queries use useFlowQuery hook directly in components.
+ */
 
-import * as fcl from '@onflow/fcl';
 import { WorkflowInfo, WorkflowMetadata } from '@/types/interfaces';
 
-const DEFAULT_ACCESS_NODE = 'https://rest-testnet.onflow.org';
-const DEFAULT_DISCOVERY_WALLET = 'https://fcl-discovery.onflow.org/testnet/authn';
-const DEFAULT_DISCOVERY_ENDPOINT = 'https://fcl-discovery.onflow.org/api/testnet/authn';
-const DEFAULT_APP_TITLE = 'ForteHub';
-const DEFAULT_APP_DESCRIPTION = 'Build & Share DeFi Workflows';
-const DEFAULT_APP_URL = 'https://fortehub.io';
-
-const ACCESS_NODE =
-  process.env.NEXT_PUBLIC_FLOW_ACCESS_NODE || DEFAULT_ACCESS_NODE;
-const DISCOVERY_WALLET =
-  process.env.NEXT_PUBLIC_FLOW_DISCOVERY_WALLET || DEFAULT_DISCOVERY_WALLET;
-const DISCOVERY_ENDPOINT =
-  process.env.NEXT_PUBLIC_FLOW_DISCOVERY_AUTHN || DEFAULT_DISCOVERY_ENDPOINT;
-const FLOW_NETWORK = process.env.NEXT_PUBLIC_FLOW_NETWORK || 'testnet';
-const APP_TITLE = process.env.NEXT_PUBLIC_APP_TITLE || DEFAULT_APP_TITLE;
-const APP_DESCRIPTION =
-  process.env.NEXT_PUBLIC_APP_DESCRIPTION || DEFAULT_APP_DESCRIPTION;
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || DEFAULT_APP_URL;
-
-let fclConfigured = false;
-const ensureFclConfigured = () => {
-  if (fclConfigured) return;
-
-  fcl
-    .config()
-    .put('accessNode.api', ACCESS_NODE)
-    .put('discovery.wallet', DISCOVERY_WALLET)
-    .put('discovery.authn.endpoint', DISCOVERY_ENDPOINT)
-    .put('flow.network', FLOW_NETWORK)
-    .put('app.detail.title', APP_TITLE)
-    .put('app.detail.description', APP_DESCRIPTION)
-    .put('app.detail.url', APP_URL);
-
-  fclConfigured = true;
-};
-
-ensureFclConfigured();
-
-export const FORTEHUB_REGISTRY =
-  process.env.NEXT_PUBLIC_FORTEHUB_REGISTRY || '0xf8d6e0586b0a20c7';
+const FORTEHUB_REGISTRY = (process.env.NEXT_PUBLIC_FORTEHUB_REGISTRY || '0xc2b9e41bc947f855').replace('0X', '0x');
+const FORTEHUB_MARKET_ADDRESS = (process.env.NEXT_PUBLIC_FORTEHUB_MARKET_ADDRESS || '0xbd4c3996265ed830').replace('0X', '0x');
 
 const emptyMetadata: WorkflowMetadata = {
   assets: [],
@@ -75,8 +45,8 @@ export const parseMetadataJSON = (metadataJSON?: string | null): WorkflowMetadat
   }
 };
 
-export const metadataToVarMap = (metadata: WorkflowMetadata): {[key: string]: string} => {
-  const map: {[key: string]: string} = {};
+export const metadataToVarMap = (metadata: WorkflowMetadata): { [key: string]: string } => {
+  const map: { [key: string]: string } = {};
   metadata.configFields.forEach(field => {
     if (field && field.name) {
       map[field.name] = field.fieldType || 'String';
@@ -85,25 +55,28 @@ export const metadataToVarMap = (metadata: WorkflowMetadata): {[key: string]: st
   return map;
 };
 
-export const normalizeCadenceDictionary = (raw: any): {[key: string]: string} => {
+export const normalizeCadenceDictionary = (raw: any): { [key: string]: any } => {
   if (!raw) return {};
 
   if (Array.isArray(raw)) {
-    const entries: {[key: string]: string} = {};
+    const entries: { [key: string]: any } = {};
     raw.forEach((item: any) => {
-      const key = item?.key;
-      const value = item?.value;
-      if (key && typeof key === 'string' && typeof value === 'string') {
-        entries[key] = value;
-      } else if (key?.value && typeof key.value === 'string') {
-        entries[key.value] = typeof value === 'string' ? value : value?.value ?? '';
+      const key =
+        typeof item?.key === 'string'
+          ? item.key
+          : item?.key?.value;
+      if (!key) {
+        return;
       }
+      const value =
+        item?.value?.value !== undefined ? item.value.value : item?.value ?? null;
+      entries[key] = value;
     });
     return entries;
   }
 
   if (typeof raw === 'object') {
-    return raw as {[key: string]: string};
+    return raw as { [key: string]: any };
   }
 
   return {};
@@ -133,7 +106,7 @@ const decodeOptionalNumber = (value: any): number | null => {
   return null;
 };
 
-const decodeCadenceNumber = (value: any): number => {
+export const decodeCadenceNumber = (value: any): number => {
   if (typeof value === 'number') {
     return value;
   }
@@ -151,7 +124,7 @@ const decodeCadenceNumber = (value: any): number => {
 interface NormalizeOptions {
   cloneCount?: number;
   forkCount?: number;
-  updatableVariables?: {[key: string]: string};
+  updatableVariables?: { [key: string]: string };
 }
 
 export const normalizeWorkflowInfo = (raw: any, options: NormalizeOptions = {}): WorkflowInfo => {
@@ -164,6 +137,8 @@ export const normalizeWorkflowInfo = (raw: any, options: NormalizeOptions = {}):
       ? raw.metadataJSON
       : '{}';
   const metadata = parseMetadataJSON(metadataJSON);
+  const configDefaults =
+    raw.configDefaults ? normalizeCadenceDictionary(raw.configDefaults) : {};
 
   const createdAt = decodeCadenceNumber(raw.createdAt);
   const parentWorkflowId = decodeOptionalNumber(raw.parentWorkflowId);
@@ -182,56 +157,107 @@ export const normalizeWorkflowInfo = (raw: any, options: NormalizeOptions = {}):
     contractName: raw.contractName || 'Unknown',
     metadataJSON,
     metadata,
+    configDefaults,
     parentWorkflowId,
     updatableVariables: options.updatableVariables,
     cloneCount: options.cloneCount ?? 0,
-    forkCount: options.forkCount ?? 0
+    forkCount: options.forkCount ?? 0,
+    clonesLocked: Boolean(raw.clonesLocked),
+    price: raw.price ? raw.price.toString() : undefined,
+    imageIPFS: raw.imageIPFS || undefined
   };
 };
 
-export const fetchWorkflowInfo = async (workflowId: number | string) => {
-  const response = await fcl.query({
-    cadence: `
-      import ForteHubRegistry from ${FORTEHUB_REGISTRY}
+/**
+ * Check if creator already has a workflow with this name
+ * Returns the existing workflow name if found, null otherwise
+ *
+ * Used in create page to warn users about duplicate workflow names
+ * This is an async helper since it's called from event handlers, not in render
+ */
+export const checkWorkflowNameExists = async (creator: string, name: string): Promise<string | null> => {
+  const FORTEHUB_REGISTRY = (process.env.NEXT_PUBLIC_FORTEHUB_REGISTRY || '0xc2b9e41bc947f855').replace('0X', '0x');
+  const FORTEHUB_MARKET_ADDRESS = (process.env.NEXT_PUBLIC_FORTEHUB_MARKET_ADDRESS || '0xbd4c3996265ed830').replace('0X', '0x');
 
-      access(all) fun main(id: UInt64): ForteHubRegistry.WorkflowInfo? {
-        return ForteHubRegistry.getWorkflowInfo(workflowId: id)
+  try {
+    // Dynamic import to get fcl - only when needed
+    const fcl = await import('@onflow/fcl');
+
+    // Get all workflows by creator
+    const response = await fcl.default.query({
+      cadence: `
+        import ForteHub from ${FORTEHUB_REGISTRY}
+
+        access(all) fun main(creator: Address): [UInt64] {
+          return ForteHub.getWorkflowsByCreator(creator: creator)
+        }
+      `,
+      args: (arg: any, t: any) => [arg(creator, t.Address)]
+    });
+
+    if (!Array.isArray(response) || response.length === 0) {
+      return null;
+    }
+
+    // For each workflow ID, check if the name matches
+    for (const workflowId of response) {
+      const id = typeof workflowId === 'string' ? workflowId : workflowId?.toString?.();
+      if (id) {
+        // Query each workflow's info
+        const workflowInfo = await fcl.default.query({
+          cadence: `
+            import ForteHub from ${FORTEHUB_REGISTRY}
+
+            access(all) fun main(id: UInt64): ForteHub.WorkflowInfo? {
+              return ForteHub.getWorkflowInfo(workflowId: id)
+            }
+          `,
+          args: (arg: any, t: any) => [arg(id, t.UInt64)]
+        });
+
+        if (workflowInfo && workflowInfo.name === name) {
+          return workflowInfo.name;
+        }
       }
-    `,
-    args: (arg, t) => [arg(workflowId.toString(), t.UInt64)]
-  });
+    }
 
-  return response || null;
+    return null;
+  } catch (error) {
+    console.warn('Failed to check workflow name existence:', error);
+    return null;
+  }
 };
 
-export const fetchCloneCount = async (workflowId: number | string): Promise<number> => {
-  const response = await fcl.query({
-    cadence: `
-      import ForteHubRegistry from ${FORTEHUB_REGISTRY}
+// Marketplace Scripts
 
-      access(all) fun main(id: UInt64): UInt64 {
-        return ForteHubRegistry.getCloneCount(workflowId: id)
-      }
-    `,
-    args: (arg, t) => [arg(workflowId.toString(), t.UInt64)]
-  });
+export const getListingDetailsScript = `
+import ForteHubMarket from ${FORTEHUB_MARKET_ADDRESS}
 
-  const count = decodeCadenceNumber(response);
-  return Number.isFinite(count) ? count : 0;
-};
+access(all) fun main(sellerAddress: Address, listingId: UInt64): ForteHubMarket.ListingDetails? {
+    let marketCollection = getAccount(sellerAddress)
+        .capabilities.get<&ForteHubMarket.ListingCollection>(/public/fortehubMarketCollection)
+        .borrow()
+        
+    if marketCollection == nil {
+        return nil
+    }
 
-export const fetchForkCount = async (workflowId: number | string): Promise<number> => {
-  const response = await fcl.query({
-    cadence: `
-      import ForteHubRegistry from ${FORTEHUB_REGISTRY}
+    return marketCollection!.borrowListingDetails(listingId: listingId)
+}
+`;
 
-      access(all) fun main(id: UInt64): UInt64 {
-        return ForteHubRegistry.getForkCount(workflowId: id)
-      }
-    `,
-    args: (arg, t) => [arg(workflowId.toString(), t.UInt64)]
-  });
+export const getSellerListingsScript = `
+import ForteHubMarket from ${FORTEHUB_MARKET_ADDRESS}
 
-  const count = decodeCadenceNumber(response);
-  return Number.isFinite(count) ? count : 0;
-};
+access(all) fun main(sellerAddress: Address): [UInt64] {
+    let marketCollection = getAccount(sellerAddress)
+        .capabilities.get<&ForteHubMarket.ListingCollection>(/public/fortehubMarketCollection)
+        .borrow()
+        
+    if marketCollection == nil {
+        return []
+    }
+
+    return marketCollection!.getActiveListingIds()
+}
+`;

@@ -4,17 +4,16 @@
 			"source": "cadence/contracts/BandOracle.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "2c71de7af78d1adf",
-				"mainnet": "0x6801a6222ebf784a"
+				"mainnet": "6801a6222ebf784a",
+				"testnet": "2c71de7af78d1adf"
 			}
 		},
 		"BandOracleConnectors": {
 			"source": "cadence/contracts/BandOracleConnectors.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0x1a9f5d18d096cd7a",
-				"mainnet": "0xf627b5c89141ed99"
-				
+				"mainnet": "f627b5c89141ed99",
+				"testnet": "1a9f5d18d096cd7a"
 			}
 		},
 		"Burner": {
@@ -23,92 +22,120 @@
 				"emulator": "f8d6e0586b0a20c7"
 			}
 		},
+		"DCAAuto": {
+			"source": "cadence/contracts/DCAAuto.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "d695aea7bfa88279"
+			}
+		},
 		"DeFiActions": {
 			"source": "cadence/contracts/DeFiActions.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0x2ab6f469ee0dfbb6",
-				"mainnet": "0x92195d814edf9cb0"
+				"mainnet": "92195d814edf9cb0",
+				"testnet": "2ab6f469ee0dfbb6"
 			}
 		},
 		"DeFiActionsMathUtils": {
 			"source": "cadence/contracts/DeFiActionsMathUtils.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0x2ab6f469ee0dfbb6",
-				"mainnet": "0x92195d814edf9cb0"
+				"mainnet": "92195d814edf9cb0",
+				"testnet": "2ab6f469ee0dfbb6"
 			}
 		},
 		"DeFiActionsUtils": {
 			"source": "cadence/contracts/DeFiActionsUtils.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0x2ab6f469ee0dfbb6",
-				"mainnet": "0x92195d814edf9cb0"
+				"mainnet": "92195d814edf9cb0",
+				"testnet": "2ab6f469ee0dfbb6"
 			}
 		},
 		"FlowToken": {
 			"source": "",
 			"aliases": {
 				"emulator": "0ae53cb6e3f42a79",
-				"testnet": "0x7e60df042a9c0868",
-				"mainnet": "0x1654653399040a61"
+				"mainnet": "1654653399040a61",
+				"testnet": "7e60df042a9c0868"
 			}
 		},
 		"FlowTransactionScheduler": {
 			"source": "",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0x8c5303eaa26202d6",
-				"mainnet": "0xe467b9dd11fa00df"
+				"mainnet": "e467b9dd11fa00df",
+				"testnet": "8c5303eaa26202d6"
 			}
 		},
 		"FlowTransactionSchedulerUtils": {
 			"source": "cadence/contracts/FlowTransactionSchedulerUtils.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0x8c5303eaa26202d6",
-				"mainnet": "0xe467b9dd11fa00df"
+				"mainnet": "e467b9dd11fa00df",
+				"testnet": "8c5303eaa26202d6"
 			}
 		},
-		"ForteHubRegistry": {
-			"source": "cadence/contracts/ForteHubRegistry.cdc",
+		"FlowTransferScheduled": {
+			"source": "cadence/contracts/FlowTransferScheduled.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0xbd4c3996265ed830"
+				"testnet": "d695aea7bfa88279"
+			}
+		},
+		"ForteHub": {
+			"source": "cadence/contracts/ForteHub.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "c2b9e41bc947f855"
+			}
+		},
+		"ForteHubMarket": {
+			"source": "cadence/contracts/ForteHubMarket.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "c2b9e41bc947f855"
 			}
 		},
 		"FungibleToken": {
 			"source": "",
 			"aliases": {
 				"emulator": "ee82856bf20e2aa6",
-				"testnet": "0x9a0766d93b6608b7",
-				"mainnet": "0xf233dcee88fe0abe"
+				"mainnet": "f233dcee88fe0abe",
+				"testnet": "9a0766d93b6608b7"
 			}
 		},
 		"FungibleTokenConnectors": {
 			"source": "cadence/contracts/FungibleTokenConnectors.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0x5a7b9cee9aaf4e4e",
-				"mainnet": "0x1d9a619393e9fb53"
+				"mainnet": "1d9a619393e9fb53",
+				"testnet": "5a7b9cee9aaf4e4e"
 			}
 		},
 		"FungibleTokenMetadataViews": {
 			"source": "",
 			"aliases": {
 				"emulator": "ee82856bf20e2aa6",
-				"testnet": "0x9a0766d93b6608b7",
-				"mainnet": "0xf233dcee88fe0abe"
+				"mainnet": "f233dcee88fe0abe",
+				"testnet": "9a0766d93b6608b7"
 			}
 		},
 		"IncrementFiSwapConnectors": {
 			"source": "cadence/contracts/IncrementFiSwapConnectors.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0x49bae091e5ea16b5",
-				"mainnet": "0xefa9bd7d1b17f1ed"
-
+				"mainnet": "efa9bd7d1b17f1ed",
+				"testnet": "49bae091e5ea16b5"
+			}
+		},
+		"MetadataViews": {
+			"source": "",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"mainnet": "1d7e57aa55817448",
+				"testnet": "631e88ae7f1d7c20"
 			}
 		},
 		"StableSwapFactory": {
@@ -153,24 +180,24 @@
 				"emulator": "f8d6e0586b0a20c7"
 			}
 		},
+		"TestWorkflow": {
+			"source": "cadence/contracts/TestWorkflow.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testnet": "c2b9e41bc947f855"
+			}
+		},
 		"ViewResolver": {
 			"source": "",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0x631e88ae7f1d7c20"
-			}
-		},
-		"MetadataViews": {
-			"source": "",
-			"aliases": {
-				"emulator": "f8d6e0586b0a20c7",
-				"testnet": "0x631e88ae7f1d7c20",
-				"mainnet": "0x1d7e57aa55817448"
+				"testnet": "631e88ae7f1d7c20"
 			}
 		}
 	},
 	"networks": {
 		"emulator": "127.0.0.1:3569",
+		"mainnet": "access.mainnet.nodes.onflow.org:9000",
 		"testing": "127.0.0.1:3569",
 		"testnet": "access.devnet.nodes.onflow.org:9000"
 	},
@@ -187,6 +214,27 @@
 			"key": {
 				"type": "file",
 				"location": "fortehub.pkey"
+			}
+		},
+		"fortehub-v2": {
+			"address": "d695aea7bfa88279",
+			"key": {
+				"type": "file",
+				"location": "fortehub-v2.pkey"
+			}
+		},
+		"fortehub-v3": {
+			"address": "c2b9e41bc947f855",
+			"key": {
+				"type": "file",
+				"location": "fortehub-v3.pkey"
+			}
+		},
+		"fortehub-v4": {
+			"address": "c430a4b0d5af6025",
+			"key": {
+				"type": "file",
+				"location": "fortehub-v4.pkey"
 			}
 		},
 		"testnet-account": {
@@ -219,7 +267,6 @@
 					]
 				},
 				"SwapRouter",
-				"ForteHubRegistry",
 				"IncrementFiSwapConnectors",
 				"BandOracle",
 				"BandOracleConnectors",
@@ -228,7 +275,10 @@
 		},
 		"testnet": {
 			"fortehub": [
-				"ForteHubRegistry"
+				"ForteHubMarket"
+			],
+			"fortehub-v3": [
+				"ForteHub"
 			]
 		}
 	}

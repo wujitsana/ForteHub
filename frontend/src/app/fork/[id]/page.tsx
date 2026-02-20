@@ -53,14 +53,14 @@ export default function ForkWorkflowPage({ params }: PageProps) {
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
               <p className="font-semibold mb-2">Phase 3 Feature (Disabled for MVP)</p>
               <p>
-                Fork workflow customization is planned for Phase 3. For now, use the Clone button on the Browse page
+                Fork workflow customization is planned for Phase 3. For now, use the Clone button on the Discover page
                 to deploy existing workflows to your wallet, then use the Create page to customize strategy parameters.
               </p>
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => router.push('/browse')}>
-                Back to Browse
+              <Button variant="outline" onClick={() => router.push('/discover')}>
+                Back to Discover
               </Button>
               <Button onClick={() => router.push('/create')}>
                 Create New Workflow

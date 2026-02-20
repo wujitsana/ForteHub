@@ -23,7 +23,7 @@ export function Footer() {
               </span>
             </div>
             <p className="text-muted-foreground text-sm">
-              Autonomous DeFi agents on Flow blockchain. Discover, subscribe, and earn 24/7.
+              Create and Discover Automatic DeFi workflows on Flow blockchain. 
             </p>
           </div>
 
@@ -32,8 +32,8 @@ export function Footer() {
             <h3 className="font-bold text-foreground mb-4 text-sm">Platform</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
-                <Link href="/agents" className="hover:text-primary transition-colors">
-                  Agents
+                <Link href="/discover" className="hover:text-primary transition-colors">
+                  Discover
                 </Link>
               </li>
               <li>

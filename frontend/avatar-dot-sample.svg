@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="600" height="600">
+  <!-- White background -->
+  <rect width="200" height="200" fill="white"/>
+
+  <!-- Brownian Motion Avatar Sample: Dot-based visualization -->
+  <!-- Each circle (radius 1.2px) represents one step in a random walk -->
+  <!-- Multiple overlapping paths create density/texture where walks visit frequently -->
+
+  <!-- Path 1: Random walk from top spreading into canvas -->
+  <circle cx="100" cy="20" r="1.2" fill="black" opacity="0.9"/>
+  <circle cx="100.8" cy="21.2" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="101.8" cy="22.5" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="102.5" cy="24.1" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="101.8" cy="25.8" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="100.9" cy="27.2" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="100.0" cy="28.5" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="99.2" cy="29.8" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="98.5" cy="31.2" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="98.0" cy="32.5" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="98.8" cy="33.9" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="99.9" cy="35.1" r="1.2" fill="black" opacity="0.7"/>
+
+  <!-- Path 2: From right side moving toward center -->
+  <circle cx="180" cy="100" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="178.8" cy="101.2" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="177.5" cy="102.5" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="176.2" cy="103.8" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="175.0" cy="105.2" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="174.2" cy="106.8" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="173.5" cy="108.1" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="172.8" cy="109.5" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="172.0" cy="110.9" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="171.5" cy="112.2" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="170.9" cy="113.5" r="1.2" fill="black" opacity="0.7"/>
+
+  <!-- Path 3: From bottom left moving up and right -->
+  <circle cx="30" cy="170" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="31.5" cy="168.5" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="33.2" cy="167.0" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="35.0" cy="165.8" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="36.8" cy="164.5" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="38.5" cy="163.0" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="40.2" cy="161.8" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="42.0" cy="160.5" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="43.8" cy="159.2" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="45.5" cy="157.8" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="47.2" cy="156.5" r="1.2" fill="black" opacity="0.7"/>
+
+  <!-- Path 4: From left side -->
+  <circle cx="20" cy="100" r="1.2" fill="black" opacity="0.9"/>
+  <circle cx="21.8" cy="101.5" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="23.5" cy="103.0" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="25.2" cy="104.8" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="27.0" cy="106.2" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="28.8" cy="107.8" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="30.5" cy="109.2" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="32.2" cy="110.5" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="34.0" cy="111.8" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="35.8" cy="113.2" r="1.2" fill="black" opacity="0.5"/>
+  <circle cx="37.5" cy="114.5" r="1.2" fill="black" opacity="0.7"/>
+
+  <!-- Central area: Dense overlapping from multiple paths crossing through center -->
+  <!-- This creates darker areas where many random walks overlap -->
+  <circle cx="100" cy="100" r="1.2" fill="black" opacity="0.9"/>
+  <circle cx="100.8" cy="99.2" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="101.5" cy="100.5" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="100.2" cy="101.2" r="1.2" fill="black" opacity="0.9"/>
+  <circle cx="99.5" cy="100.8" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="98.8" cy="99.5" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="99.2" cy="101.5" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="101.2" cy="99.8" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="100.5" cy="100.2" r="1.2" fill="black" opacity="0.9"/>
+  <circle cx="99.0" cy="100.5" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="101.0" cy="101.0" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="100.0" cy="99.0" r="1.2" fill="black" opacity="0.6"/>
+  <circle cx="100.3" cy="101.8" r="1.2" fill="black" opacity="0.7"/>
+  <circle cx="98.5" cy="101.2" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="101.8" cy="100.0" r="1.2" fill="black" opacity="0.7"/>
+  <!-- More dots to show dense center -->
+  <circle cx="100.1" cy="100.0" r="1.2" fill="black" opacity="0.9"/>
+  <circle cx="99.9" cy="99.9" r="1.2" fill="black" opacity="0.8"/>
+  <circle cx="100.2" cy="100.8" r="1.2" fill="black" opacity="0.7"/>
+</svg>

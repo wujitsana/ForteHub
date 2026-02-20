@@ -38,7 +38,7 @@ alwaysApply: true
 - **User Experience (UX) for dApps**: For UI-related tasks, prioritize clear user feedback for blockchain interactions (loading states, success/error messages, transaction status). Ensure modals and other UI elements are user-friendly.
 
 ## Error Resolution Style
-- **Systematic Debugging**: Address errors methodically, one at a time. Use browser dev tools for FCL, CLI output for Cadence/deployment.
+- **Systematic Debugging**: Address errors methodically, one at a time. Use discoverr dev tools for FCL, CLI output for Cadence/deployment.
 - **Reference-Based Solutions**: Look to official examples, documentation, and established patterns.
 - **Pattern Application**: Apply learned patterns (e.g., for FCL config, transaction authorization, modular design) to similar situations.
 - **Prevention Focus**: Establish practices (like those in these rules) to avoid repeating the same errors, particularly configuration errors between frontend and backend.
@@ -80,7 +80,7 @@ alwaysApply: true
 - **User Experience (UX) for dApps**: For UI-related tasks, prioritize clear user feedback for blockchain interactions (loading states, success/error messages, transaction status). Ensure modals and other UI elements are user-friendly.
 
 ## Error Resolution Style
-- **Systematic Debugging**: Address errors methodically, one at a time. Use browser dev tools for FCL, CLI output for Cadence/deployment.
+- **Systematic Debugging**: Address errors methodically, one at a time. Use discoverr dev tools for FCL, CLI output for Cadence/deployment.
 - **Reference-Based Solutions**: Look to official examples, documentation, and established patterns.
 - **Pattern Application**: Apply learned patterns (e.g., for FCL config, transaction authorization, modular design) to similar situations.
 - **Prevention Focus**: Establish practices (like those in these rules) to avoid repeating the same errors, particularly configuration errors between frontend and backend.

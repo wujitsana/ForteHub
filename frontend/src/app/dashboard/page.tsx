@@ -1,56 +1,148 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, type ComponentProps } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { WorkflowInfo, MetadataConfigField, TokenBalance } from '@/types/interfaces';
+import { WorkflowInfo, MetadataConfigField } from '@/types/interfaces';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Modal, ModalBody, ModalFooter, ModalHeader } from '@/components/ui/modal';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRouter } from 'next/navigation';
-import { useFlowCurrentUser, useFlowQuery, useFlowMutate } from '@onflow/react-sdk';
+import Link from 'next/link';
+import { User } from 'lucide-react';
 import {
-  FORTEHUB_REGISTRY,
-  fetchWorkflowInfo,
-  fetchCloneCount,
-  fetchForkCount,
+  useFlowCurrentUser,
+  useFlowQuery,
+  useFlowAccount,
+  TransactionButton,
+  TransactionDialog,
+  useFlowEvents,
+  useFlowTransaction,
+} from '@onflow/react-sdk';
+
+import {
   normalizeWorkflowInfo,
   metadataToVarMap,
   normalizeCadenceDictionary
 } from '@/lib/flowScripts';
+import SchedulingControls from '@/components/dashboard/SchedulingControls';
+import { Avatar } from '@/components/profile/ProfileAvatar';
+import { ListingModal } from '@/components/marketplace/ListingModal';
+
+import { runWorkflowTransaction } from '@/lib/runWorkflowTransaction';
+import { createListingTransaction, cancelListingTransaction } from '@/lib/marketplaceTransactions';
+
+const FORTEHUB_REGISTRY = (process.env.NEXT_PUBLIC_FORTEHUB_REGISTRY || '0xc2b9e41bc947f855').replace('0X', '0x');
+
+type TransactionConfig = ComponentProps<typeof TransactionButton>['transaction'];
 
 export default function Dashboard() {
   const [myCreatedWorkflows, setMyCreatedWorkflows] = useState<WorkflowInfo[]>([]);
   const [myDeployedWorkflows, setMyDeployedWorkflows] = useState<WorkflowInfo[]>([]);
   const [loadingCreated, setLoadingCreated] = useState(true);
   const [loadingDeployed, setLoadingDeployed] = useState(true);
-  const [flowBalance, setFlowBalance] = useState<number>(0);
-  const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
-  const [loadingTokens, setLoadingTokens] = useState(false);
   const [expandedWorkflowConfig, setExpandedWorkflowConfig] = useState<number | null>(null);
-  const [updatableVars, setUpdatableVars] = useState<{[key: number]: {[key: string]: string}}>({});
-  const [workflowPauseStatus, setWorkflowPauseStatus] = useState<{[key: number]: boolean}>({});
-  const [varInputs, setVarInputs] = useState<{[key: number]: {[key: string]: string}}>({});
-  const [deployedContractNames, setDeployedContractNames] = useState<{[key: string]: string}>({});
-  const [workflowContractMapping, setWorkflowContractMapping] = useState<{[key: number]: string}>({});
-  const [pauseSupported, setPauseSupported] = useState<{[key: number]: boolean}>({});
-  const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error'; text: string} | null>(null);
+  const [updatableVars, setUpdatableVars] = useState<{ [key: number]: { [key: string]: string } }>({});
+  const [varInputs, setVarInputs] = useState<{ [key: number]: { [key: string]: string } }>({});
+  const [workflowContractMapping, setWorkflowContractMapping] = useState<{ [key: number]: string }>({});
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'loading'; text: string } | null>(null);
   const [confirmState, setConfirmState] = useState<{
-    type: 'pause' | 'burn' | 'unlist';
+    type: 'burn' | 'unlist' | 'setPrice' | 'lockClones' | 'list';
     workflow: WorkflowInfo;
-    isPaused?: boolean;
   } | null>(null);
   const [unlistAlsoBurn, setUnlistAlsoBurn] = useState(false);
-  const [varErrors, setVarErrors] = useState<{[key: number]: {[key: string]: string}}>({});
+  const [priceInput, setPriceInput] = useState<string>('');
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [varErrors, setVarErrors] = useState<{ [key: number]: { [key: string]: string } }>({});
   const [reviewWorkflow, setReviewWorkflow] = useState<WorkflowInfo | null>(null);
-  const [reviewChanges, setReviewChanges] = useState<Array<{name: string; value: string; type: string}>>([]);
+  const [reviewChanges, setReviewChanges] = useState<Array<{ name: string; value: string; type: string }>>([]);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [isSubmittingChanges, setIsSubmittingChanges] = useState(false);
-  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [varTransaction, setVarTransaction] = useState<TransactionConfig | null>(null);
+  const [varTransactionTarget, setVarTransactionTarget] = useState<{ workflowId: number; workflowName: string } | null>(null);
+  const [isVarTransactionModalOpen, setIsVarTransactionModalOpen] = useState(false);
+  const [isListingModalOpen, setIsListingModalOpen] = useState(false);
+  const [selectedWorkflowForListing, setSelectedWorkflowForListing] = useState<WorkflowInfo | null>(null);
+  const [transactionDialogTxId, setTransactionDialogTxId] = useState<string | null>(null);
+  const [isTransactionDialogOpen, setIsTransactionDialogOpen] = useState(false);
+  const [transactionSuccessMeta, setTransactionSuccessMeta] = useState<{
+    type: 'burn' | 'unlist' | 'config' | 'lockClones';
+    workflowId?: number;
+    workflowName?: string;
+  } | null>(null);
+  const [walletVaults, setWalletVaults] = useState<Array<{ symbol: string; path: string; balance: string }>>([]);
+  const [isVaultsLoading, setIsVaultsLoading] = useState(false);
+  const [vaultsError, setVaultsError] = useState<string | null>(null);
+  const [updatedParentWorkflowIds, setUpdatedParentWorkflowIds] = useState<Set<string>>(new Set());
+  const [isDashboardSetup, setIsDashboardSetup] = useState(true);
+
   const router = useRouter();
 
   const { user } = useFlowCurrentUser();
+  const isUserLoading = !user; // Approximate loading state
   const userAddress = user?.addr || '';
+
+  const { data: account, isLoading: isAccountLoading } = useFlowAccount({
+    address: userAddress || undefined,
+    query: {
+      enabled: !!userAddress,
+      staleTime: 30000
+    }
+  });
+
+  // Listen for WorkflowMetadataUpdated events for parent workflows
+  // Disabled: WebSocket connection issues - will improve in Phase 3
+  // useFlowEvents({
+  //   eventType: `A.${FORTEHUB_REGISTRY.slice(2)}.ForteHub.WorkflowMetadataUpdated`,
+  //   onEvent: useCallback((event: any) => {
+  //     // Extract workflowId from event data
+  //     const workflowId = event?.data?.workflowId;
+  //     if (workflowId) {
+  //       // Check if this is a parent workflow (has clones)
+  //       const workflowIdStr = workflowId.toString();
+  //       setUpdatedParentWorkflowIds(prev => {
+  //         const newSet = new Set(prev);
+  //         newSet.add(workflowIdStr);
+  //         return newSet;
+  //       });
+
+  //       // Show notification about parent workflow update
+  //       setStatusMessage({
+  //         type: 'success',
+  //         text: `Parent workflow ${workflowId} has been updated by its creator. Check for new defaults.`
+  //       });
+  //     }
+  //   }, [])
+  // });
+
+  const flowVaultBalance = useMemo(() => {
+    const flowEntry = walletVaults.find(
+      (vault) => vault.symbol?.toUpperCase() === 'FLOW'
+    );
+    if (!flowEntry) {
+      return 0;
+    }
+    const parsed = parseFloat(flowEntry.balance);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [walletVaults]);
+  const flowAccountBalance = useMemo(() => {
+    if (!account?.balance) return null;
+    const parsed =
+      typeof account.balance === 'string'
+        ? parseFloat(account.balance)
+        : Number(account.balance);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [account?.balance]);
+  const displayFlowBalance = flowAccountBalance ?? flowVaultBalance;
+  const isFlowBalanceLoading =
+    !!userAddress &&
+    ((flowAccountBalance === null && isAccountLoading) ||
+      (flowAccountBalance === null && flowVaultBalance === 0 && isVaultsLoading));
+  const nonFlowVaults = useMemo(
+    () => walletVaults.filter((vault) => vault.symbol?.toUpperCase() !== 'FLOW'),
+    [walletVaults]
+  );
 
   const getMetadataField = (workflow: WorkflowInfo, fieldName: string): MetadataConfigField | undefined => {
     return workflow.metadata?.configFields.find((field) => field.name === fieldName);
@@ -96,176 +188,169 @@ export default function Dashboard() {
       .replace(/^\w/g, (c) => c.toUpperCase());
   };
 
-  // Query to get created workflow IDs
-  const { data: createdWorkflowIds = [], isLoading: isLoadingCreatedIds } = useFlowQuery({
-    cadence: `
-      import ForteHubRegistry from ${FORTEHUB_REGISTRY}
-
-      access(all) fun main(creator: Address): [UInt64] {
-        return ForteHubRegistry.getWorkflowsByCreator(creator: creator)
-      }
-    `,
-    args: (arg, t) => [arg(userAddress, t.Address)],
-    query: {
-      queryKey: ['created-workflow-ids', userAddress],
-      enabled: !!userAddress,
-      staleTime: 30000
+  const handleTransactionDialogChange = useCallback((open: boolean) => {
+    setIsTransactionDialogOpen(open);
+    if (!open) {
+      setTransactionDialogTxId(null);
+      setTransactionSuccessMeta(null);
     }
-  });
-
-  // Query to get deployed contract names
-  const { data: deployedContractList = [], isLoading: isLoadingContracts } = useFlowQuery({
-    cadence: `
-      access(all) fun main(address: Address): [String] {
-        let account = getAccount(address)
-        let namesRef = account.contracts.names
-        let result: [String] = []
-        for name in namesRef {
-          result.append(name)
-        }
-        return result
-      }
-    `,
-    args: (arg, t) => [arg(userAddress, t.Address)],
-    query: {
-      queryKey: ['deployed-contracts', userAddress],
-      enabled: !!userAddress,
-      staleTime: 30000
-    }
-  });
-
-  // Build contract mapping
-  useEffect(() => {
-    const contractMapping: {[key: string]: string} = {};
-    (deployedContractList as string[]).forEach((name: string) => {
-      if (typeof name === 'string') {
-        contractMapping[name] = name;
-      }
-    });
-    setDeployedContractNames(contractMapping);
-  }, [deployedContractList]);
-
-  // Load created workflows details
-  // Memoize the createdWorkflowIds to prevent infinite loops from array reference changes
-  const createdWorkflowIdsStr = useMemo(() => JSON.stringify(createdWorkflowIds), [createdWorkflowIds]);
-
-  useEffect(() => {
-    if (!isLoadingCreatedIds && Array.isArray(createdWorkflowIds) && createdWorkflowIds.length >= 0) {
-      (async () => {
-        setLoadingCreated(true);
-        try {
-          const updatableVarsAccum: {[key: number]: {[key: string]: string}} = {};
-
-          const details = await Promise.all(
-            (createdWorkflowIds as number[]).map(async (id: number) => {
-              try {
-                const rawInfo = await fetchWorkflowInfo(id);
-                if (!rawInfo || typeof rawInfo !== 'object') {
-                  return null;
-                }
-
-                const [cloneCount, forkCount] = await Promise.all([
-                  fetchCloneCount(id),
-                  fetchForkCount(id)
-                ]);
-
-                const normalizedBase = normalizeWorkflowInfo(rawInfo, {
-                  cloneCount,
-                  forkCount
-                });
-
-                let registryVars = normalizedBase.metadata
-                  ? metadataToVarMap(normalizedBase.metadata)
-                  : {};
-                if ((!registryVars || Object.keys(registryVars).length === 0) && rawInfo.updatableVariables) {
-                  registryVars = normalizeCadenceDictionary(rawInfo.updatableVariables);
-                }
-
-                if (registryVars && Object.keys(registryVars).length > 0) {
-                  updatableVarsAccum[id] = registryVars;
-                }
-
-                const workflow: WorkflowInfo = {
-                  ...normalizedBase,
-                  updatableVariables:
-                    registryVars && Object.keys(registryVars).length > 0
-                      ? registryVars
-                      : normalizedBase.updatableVariables
-                };
-
-                return workflow;
-              } catch (error) {
-                console.error('Error fetching workflow', id, error);
-                return null;
-              }
-            })
-          );
-
-          const filtered = details.filter((w): w is WorkflowInfo => w !== null);
-          setMyCreatedWorkflows(filtered);
-
-          // Update all accumulated vars at once after fetch completes
-          if (Object.keys(updatableVarsAccum).length > 0) {
-            setUpdatableVars(prev => ({
-              ...prev,
-              ...updatableVarsAccum
-            }));
-          }
-        } finally {
-          setLoadingCreated(false);
-        }
-      })();
-    }
-  }, [isLoadingCreatedIds, createdWorkflowIdsStr]);
-
-  // Load deployed workflows (stub for now - would need registry queries)
-  useEffect(() => {
-    setMyDeployedWorkflows([]);
-    setLoadingDeployed(false);
   }, []);
 
-  // Load balances
-  useEffect(() => {
-    if (!userAddress) return;
+  // Fetch all created workflows in one query
+  const { data: rawCreatedWorkflows = [], isLoading: isLoadingCreated, error: queryError } = useFlowQuery({
+    cadence: `
+      import ForteHub from ${FORTEHUB_REGISTRY}
 
-    const loadFlowBalance = async () => {
-      try {
-        const response = await fetch(`/api/balance?address=${userAddress}`);
-        if (response.ok) {
-          const data = await response.json();
-          let balance = 0;
-          if (typeof data.balance === 'object' && data.balance.value) {
-            balance = parseFloat(data.balance.value) || 0;
-          } else if (typeof data.balance === 'number') {
-            balance = data.balance;
-          }
-          setFlowBalance(balance);
+      access(all) fun main(creator: Address): [ForteHub.WorkflowInfo?] {
+        let ids = ForteHub.getWorkflowsByCreator(creator: creator)
+        let results: [ForteHub.WorkflowInfo?] = []
+        for id in ids {
+          results.append(ForteHub.getWorkflowInfo(workflowId: id))
         }
-      } catch (error) {
-        console.error('Failed to load FLOW balance:', error);
+        return results
       }
-    };
+    `,
+    args: (arg, t) => [arg(userAddress, t.Address)],
+    query: {
+      enabled: !!userAddress,
+      staleTime: 30000
+    }
+  });
 
-    const loadTokenBalances = async () => {
-      try {
-        setLoadingTokens(true);
-        setTokenBalances([
-          {
-            symbol: 'FLOW',
-            name: 'Flow Token',
-            balance: flowBalance.toString()
+  // Normalize workflows when loaded
+  useEffect(() => {
+    if (isLoadingCreated) {
+      setLoadingCreated(true);
+      return;
+    }
+
+    if (queryError) {
+      console.error('Query error:', queryError);
+      setLoadingCreated(false);
+      setMyCreatedWorkflows([]);
+      return;
+    }
+
+    if (Array.isArray(rawCreatedWorkflows) && rawCreatedWorkflows.length > 0) {
+      const normalized = rawCreatedWorkflows
+        .map((raw: any) => {
+          try {
+            if (!raw) return null;
+            return normalizeWorkflowInfo(raw);
+          } catch (error) {
+            console.error('Error normalizing workflow:', error);
+            return null;
           }
-        ]);
-      } catch (error) {
-        console.error('Failed to load token balances:', error);
-      } finally {
-        setLoadingTokens(false);
-      }
-    };
+        })
+        .filter((w): w is WorkflowInfo => w !== null);
 
-    loadFlowBalance();
-    loadTokenBalances();
-  }, [userAddress]);
+      setMyCreatedWorkflows(normalized);
+
+      // Extract updatable variables and contract mappings from workflow metadata
+      normalized.forEach(workflow => {
+        if (workflow.metadata && Object.keys(workflow.metadata).length > 0) {
+          const registryVars = metadataToVarMap(workflow.metadata);
+          if (registryVars && Object.keys(registryVars).length > 0) {
+            setUpdatableVars(prev => ({
+              ...prev,
+              [workflow.workflowId]: registryVars
+            }));
+          }
+        }
+
+        const resolvedContractName = sanitizeContractName(workflow.contractName || '');
+        if (resolvedContractName) {
+          setWorkflowContractMapping(prev => ({
+            ...prev,
+            [workflow.workflowId]: resolvedContractName
+          }));
+        }
+      });
+    } else {
+      setMyCreatedWorkflows([]);
+    }
+
+    setLoadingCreated(false);
+  }, [isLoadingCreated, (rawCreatedWorkflows as any[])?.length, queryError?.message]);
+
+  // Fetch deployed workflows (clones in user's Manager)
+  const { data: rawDeployedWorkflows, isLoading: isLoadingDeployedQuery, error: deployedError, refetch: refetchDeployed } = useFlowQuery({
+    cadence: `
+      import ForteHub from ${FORTEHUB_REGISTRY}
+
+      access(all) fun main(address: Address): [ForteHub.WorkflowInfo?]? {
+        let account = getAccount(address)
+        
+        // Check for public capability
+        let cap = account.capabilities.get<&ForteHub.Manager>(ForteHub.FORTEHUB_MANAGER_PUBLIC)
+        if !cap.check() {
+          return nil
+        }
+
+        let managerRef = cap.borrow()!
+        let ids = managerRef.listWorkflowIds()
+        let results: [ForteHub.WorkflowInfo?] = []
+        
+        for id in ids {
+          results.append(ForteHub.getWorkflowInfo(workflowId: id))
+        }
+        
+        return results
+      }
+    `,
+    args: (arg, t) => [arg(userAddress, t.Address)],
+    query: {
+      enabled: !!userAddress,
+      staleTime: 10000
+    }
+  });
+
+  useEffect(() => {
+    if (isLoadingDeployedQuery) {
+      setLoadingDeployed(true);
+      return;
+    }
+
+    if (deployedError) {
+      console.error('Deployed query error:', deployedError);
+      setLoadingDeployed(false);
+      // Don't clear workflows here to avoid flashing empty state if it's a transient error
+      return;
+    }
+
+    // If result is null, it means manager is not setup/linked
+    if (rawDeployedWorkflows === null) {
+      setIsDashboardSetup(false);
+      setMyDeployedWorkflows([]);
+      setLoadingDeployed(false);
+      return;
+    }
+
+    setIsDashboardSetup(true);
+
+    if (Array.isArray(rawDeployedWorkflows) && rawDeployedWorkflows.length > 0) {
+      const normalized = rawDeployedWorkflows
+        .map((raw: any) => {
+          try {
+            if (!raw) return null;
+            return normalizeWorkflowInfo(raw);
+          } catch (error) {
+            console.error('Error normalizing deployed workflow:', error);
+            return null;
+          }
+        })
+        .filter((w): w is WorkflowInfo => w !== null);
+
+      setMyDeployedWorkflows(normalized);
+    } else {
+      setMyDeployedWorkflows([]);
+    }
+
+    setLoadingDeployed(false);
+  }, [isLoadingDeployedQuery, rawDeployedWorkflows, deployedError]);
+
+
+
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -275,243 +360,318 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, [statusMessage]);
 
-  // Mutation hooks
-  const { mutate: executePauseMutation } = useFlowMutate({
-    mutation: {
-      onSuccess: () => {
-        setStatusMessage({
-          type: 'success',
-          text: 'Workflow state updated successfully.'
-        });
-      },
-      onError: (error: Error) => {
-        setStatusMessage({
-          type: 'error',
-          text: `Failed to update workflow: ${error.message}`
-        });
+  // Query wallet vaults using useFlowQuery
+  const { data: rawVaults = [], isLoading: isLoadingVaults, error: vaultsQueryError } = useFlowQuery({
+    cadence: `
+      import FungibleToken from 0x9a0766d93b6608b7
+
+      access(all) fun main(address: Address): [{String: String}] {
+        let account = getAccount(address)
+        let vaults: [{String: String}] = []
+
+        // Tokens with public balance capability paths
+        let tokenConfigs: [{String: String}] = [
+          {"symbol": "FLOW", "public": "flowTokenBalance"},
+          {"symbol": "USDC", "public": "usdcFlowBalance"},
+          {"symbol": "USDCFlow", "public": "usdcFlowBalance"},
+          {"symbol": "USDF", "public": "usdfBalance"},
+          {"symbol": "stFlow", "public": "stFlowBalance"},
+          {"symbol": "ankrFLOW", "public": "ankrFLOWBalance"},
+          {"symbol": "MOET", "public": "moetBalance"},
+          {"symbol": "WETH", "public": "wethBalance"},
+          {"symbol": "WBTC", "public": "wbtcBalance"},
+          {"symbol": "cbBTC", "public": "cbBTCBalance"},
+          {"symbol": "USDT", "public": "usdtBalance"},
+          {"symbol": "fuUSDT", "public": "fuUSDTVaultBalance"},
+          {"symbol": "fuDAI", "public": "fuDAIVaultBalance"}
+        ]
+
+        for token in tokenConfigs {
+          let symbol = token["symbol"]!
+          let publicIdentifier = token["public"]!
+
+          let publicPath = PublicPath(identifier: publicIdentifier)
+          if publicPath == nil {
+            continue
+          }
+
+          let capability = account.capabilities.get<&{FungibleToken.Balance}>(publicPath!)
+          if !capability.check() {
+            continue
+          }
+
+          if let balanceRef = capability.borrow() {
+            let bal = balanceRef.balance
+            if bal > 0.0 {
+              vaults.append({
+                "symbol": symbol,
+                "path": publicPath!.toString(),
+                "balance": bal.toString()
+              })
+            }
+          }
+        }
+
+        return vaults
       }
+    `,
+    args: (arg: any, t: any) => [arg(userAddress, t.Address)],
+    query: {
+      enabled: !!userAddress,
+      staleTime: 30000
     }
   });
 
-  const { mutate: executeBurnMutation } = useFlowMutate({
-    mutation: {
-      onSuccess: () => {
-        setStatusMessage({
-          type: 'success',
-          text: 'Contract burned successfully.'
-        });
-      },
-      onError: (error: Error) => {
-        setStatusMessage({
-          type: 'error',
-          text: `Failed to burn contract: ${error.message}`
-        });
-      }
-    }
-  });
-
-  const { mutate: executeUnlistMutation } = useFlowMutate({
-    mutation: {
-      onSuccess: () => {
-        setStatusMessage({
-          type: 'success',
-          text: 'Workflow removed from registry.'
-        });
-      },
-      onError: (error: Error) => {
-        setStatusMessage({
-          type: 'error',
-          text: `Failed to remove from registry: ${error.message}`
-        });
-      }
-    }
-  });
-
-  const { mutate: executeUpdateVarMutation } = useFlowMutate({
-    mutation: {
-      onSuccess: () => {
-        setStatusMessage({
-          type: 'success',
-          text: 'Configuration updated successfully.'
-        });
-      },
-      onError: (error: Error) => {
-        setStatusMessage({
-          type: 'error',
-          text: `Failed to update configuration: ${error.message}`
-        });
-      }
-    }
-  });
-
-  const executePauseResume = async (workflow: WorkflowInfo, isPaused: boolean) => {
-    if (!userAddress) return;
-
-    const contractName = workflowContractMapping[workflow.workflowId];
-    if (!contractName) {
-      setStatusMessage({
-        type: 'error',
-        text: 'Could not find deployed contract. Please refresh and try again.'
-      });
+  // Update wallet vaults state when query data changes
+  useEffect(() => {
+    if (isLoadingVaults) {
+      setIsVaultsLoading(true);
       return;
     }
 
-    const action = isPaused ? 'resume' : 'pause';
+    const vaults = Array.isArray(rawVaults)
+      ? rawVaults.map((item: any) => ({
+        symbol: item.symbol || item['symbol'] || 'Unknown',
+        path: item.path || item['path'] || '',
+        balance: item.balance || item['balance'] || '0.0'
+      }))
+      : [];
 
-    try {
-      const cadenceCode = `
-        import ${contractName} from ${userAddress}
+    setWalletVaults(vaults);
+    setVaultsError(vaultsQueryError ? 'Unable to load wallet token balances right now.' : null);
+    setIsVaultsLoading(false);
+  }, [isLoadingVaults]);
 
-        transaction {
-          execute {
-            ${contractName}.${action}()
-          }
-        }
-      `;
-
-      executePauseMutation({
-        cadence: cadenceCode,
-        gasLimit: 9999,
-      });
-
-      setWorkflowPauseStatus(prev => ({
-        ...prev,
-        [workflow.workflowId]: !isPaused
-      }));
-    } catch (error) {
-      console.error(`Error ${action}ing workflow:`, error);
-      setStatusMessage({
-        type: 'error',
-        text: `Failed to ${action} workflow.`
+  const beginTransactionTracking = (
+    txId: string,
+    meta: {
+      type: 'pause' | 'resume' | 'burn' | 'unlist' | 'config' | 'lockClones';
+      workflowId?: number;
+      workflowName?: string;
+      nextPausedState?: boolean;
+    }
+  ) => {
+    setTransactionDialogTxId(txId);
+    setIsTransactionDialogOpen(true);
+    // Only set transactionSuccessMeta for types that need success tracking
+    if (meta.type === 'burn' || meta.type === 'unlist' || meta.type === 'config' || meta.type === 'lockClones') {
+      setTransactionSuccessMeta({
+        type: meta.type,
+        workflowId: meta.workflowId,
+        workflowName: meta.workflowName
       });
     }
   };
 
-  const executeBurnWorkflow = async (workflow: WorkflowInfo) => {
-    if (!userAddress) return;
+  const handleTransactionSuccess = () => {
+    if (!transactionSuccessMeta) return;
+    const name = transactionSuccessMeta.workflowName || 'Workflow';
 
-    try {
-      const contractName = workflowContractMapping[workflow.workflowId];
-      if (!contractName) {
-        setStatusMessage({
-          type: 'error',
-          text: 'Could not find deployed contract. Please refresh and try again.'
-        });
-        return;
+    if (transactionSuccessMeta.type === 'burn') {
+      setStatusMessage({
+        type: 'success',
+        text: `${name} contract burned successfully.`
+      });
+    } else if (transactionSuccessMeta.type === 'unlist') {
+      setStatusMessage({
+        type: 'success',
+        text: `${name} removed from the public registry.`
+      });
+      if (transactionSuccessMeta.workflowId) {
+        setMyCreatedWorkflows(prev =>
+          prev.map((wf) =>
+            wf.workflowId === transactionSuccessMeta.workflowId
+              ? { ...wf, isListed: false }
+              : wf
+          )
+        );
       }
+    } else if (transactionSuccessMeta.type === 'lockClones') {
+      setStatusMessage({
+        type: 'success',
+        text: `${name} cloning has been locked.`
+      });
+      if (transactionSuccessMeta.workflowId) {
+        setMyCreatedWorkflows(prev =>
+          prev.map((wf) =>
+            wf.workflowId === transactionSuccessMeta.workflowId
+              ? { ...wf, clonesLocked: true }
+              : wf
+          )
+        );
+      }
+    } else if (transactionSuccessMeta.type === 'config') {
+      setStatusMessage({
+        type: 'success',
+        text: `${name} configuration updated successfully.`
+      });
+      if (transactionSuccessMeta.workflowId !== undefined) {
+        const workflowId = transactionSuccessMeta.workflowId;
+        setVarInputs(prev => ({
+          ...prev,
+          [workflowId]: {}
+        }));
+        setVarErrors(prev => ({
+          ...prev,
+          [workflowId]: {}
+        }));
+      }
+    }
 
-      const cadenceCode = `
+    setTransactionSuccessMeta(null);
+  };
+
+  const resolveContractName = (workflow: WorkflowInfo): string => {
+    return (
+      workflowContractMapping[workflow.workflowId] ||
+      sanitizeContractName(workflow.contractName || '') ||
+      ''
+    );
+  };
+
+  const buildBurnTransaction = (workflow: WorkflowInfo): TransactionConfig => {
+    if (!userAddress) {
+      throw new Error('Please connect your wallet.');
+    }
+    const contractName = resolveContractName(workflow);
+    if (!contractName) {
+      throw new Error('Could not find deployed contract. Please refresh and try again.');
+    }
+    return {
+      cadence: `
         transaction(name: String) {
           prepare(signer: auth(RemoveContract) &Account) {
             signer.contracts.remove(name: name)
           }
         }
-      `;
-
-      executeBurnMutation({
-        cadence: cadenceCode,
-        gasLimit: 9999,
-        args: (arg, t) => [arg(contractName, t.String)]
-      });
-    } catch (error) {
-      console.error('Error burning contract:', error);
-      setStatusMessage({
-        type: 'error',
-        text: 'Failed to burn contract.'
-      });
-    }
+      `,
+      limit: 9999,
+      args: (arg: any, t: any) => [arg(contractName, t.String)]
+    };
   };
 
-  const executeRemoveFromRegistry = async (workflow: WorkflowInfo, options?: { burnAfter?: boolean }) => {
-    if (!userAddress) return;
+  const buildUnlistTransaction = (workflow: WorkflowInfo, burnAfter: boolean): TransactionConfig => {
+    if (!userAddress) {
+      throw new Error('Please connect your wallet.');
+    }
+    const contractName = resolveContractName(workflow);
+    if (burnAfter && !contractName) {
+      throw new Error('Could not find deployed contract. Please refresh and try again.');
+    }
 
-    try {
-      const cadenceCode = `
-        import ForteHubRegistry from ${FORTEHUB_REGISTRY}
+    const cadence = burnAfter
+      ? `
+        import ForteHub from ${FORTEHUB_REGISTRY}
+
+        transaction(workflowId: UInt64, contractName: String) {
+          prepare(signer: auth(Storage, RemoveContract) &Account) {
+            ForteHub.setWorkflowListing(workflowId: workflowId, creator: signer.address, isListed: false)
+            signer.contracts.remove(name: contractName)
+          }
+        }
+      `
+      : `
+        import ForteHub from ${FORTEHUB_REGISTRY}
 
         transaction(workflowId: UInt64) {
           prepare(signer: auth(Storage) &Account) {
-            ForteHubRegistry.setWorkflowListing(workflowId: workflowId, creator: signer.address, isListed: false)
+            ForteHub.setWorkflowListing(workflowId: workflowId, creator: signer.address, isListed: false)
           }
         }
       `;
 
-      executeUnlistMutation({
-        cadence: cadenceCode,
-        gasLimit: 9999,
-        args: (arg, t) => [arg(workflow.workflowId.toString(), t.UInt64)]
-      });
-
-      if (options?.burnAfter) {
-        await executeBurnWorkflow(workflow);
+    return {
+      cadence,
+      limit: 9999,
+      args: (arg: any, t: any) => {
+        const baseArgs = [arg(workflow.workflowId.toString(), t.UInt64)];
+        if (burnAfter) {
+          baseArgs.push(arg(contractName, t.String));
+        }
+        return baseArgs;
       }
-    } catch (error) {
-      console.error('Error removing from registry:', error);
-      setStatusMessage({
-        type: 'error',
-        text: `Failed to remove from registry: ${error instanceof Error ? error.message : 'Unknown error'}`
-      });
-    }
+    };
   };
 
-  const handleUpdateVariable = async (
-    workflow: WorkflowInfo,
-    variableName: string,
-    newValue: string,
-    varType: string
-  ) => {
-    if (!userAddress) return;
-
-    try {
-      const contractName = workflowContractMapping[workflow.workflowId];
-      if (!contractName) {
-        setStatusMessage({
-          type: 'error',
-          text: 'Could not find deployed contract. Please refresh and try again.'
-        });
-        throw new Error('Missing contract name');
-      }
-
-      const functionName = `update${variableName.charAt(0).toUpperCase() + variableName.slice(1)}`;
-
-      const cadenceCode = `
-        import ${contractName} from ${userAddress}
-
-        transaction(newValue: ${varType}) {
-          execute {
-            ${contractName}.${functionName}(newValue: newValue)
-          }
-        }
-      `;
-
-      const args = (arg: any, t: any) => {
-        if (varType === 'UFix64') {
-          return [arg(newValue, t.UFix64)];
-        } else if (varType === 'UInt64') {
-          return [arg(newValue, t.UInt64)];
-        } else {
-          return [arg(newValue, t.String)];
-        }
-      };
-
-      executeUpdateVarMutation({
-        cadence: cadenceCode,
-        gasLimit: 9999,
-        args
-      });
-
-      setVarInputs(prev => ({
-        ...prev,
-        [workflow.workflowId]: { ...prev[workflow.workflowId], [variableName]: '' }
-      }));
-    } catch (error) {
-      console.error('Error updating variable:', error);
-      setStatusMessage({
-        type: 'error',
-        text: `Failed to update ${formatVarName(variableName)}.`
-      });
-      throw error;
+  const buildSetPriceTransaction = (workflow: WorkflowInfo, newPrice: string): TransactionConfig => {
+    if (!userAddress) {
+      throw new Error('Please connect your wallet.');
     }
+
+    const priceValue = newPrice.trim() === '' ? null : newPrice;
+    const cadence = `
+      import ForteHub from ${FORTEHUB_REGISTRY}
+
+      transaction(workflowId: UInt64, creator: Address, newPrice: UFix64?) {
+        execute {
+          ForteHub.setWorkflowPrice(workflowId: workflowId, creator: creator, newPrice: newPrice)
+        }
+      }
+    `;
+
+    return {
+      cadence,
+      limit: 9999,
+      args: (arg: any, t: any) => [
+        arg(workflow.workflowId.toString(), t.UInt64),
+        arg(userAddress, t.Address),
+        priceValue ? arg(priceValue, t.UFix64) : arg(null, t.Optional(t.UFix64))
+      ]
+    };
+  };
+
+  const buildVariableUpdateTransaction = (
+    workflow: WorkflowInfo,
+    changes: Array<{ name: string; value: string; type: string }>
+  ): TransactionConfig => {
+    if (!userAddress) {
+      throw new Error('Please connect your wallet.');
+    }
+    const contractName = resolveContractName(workflow);
+    if (!contractName) {
+      throw new Error('Could not find deployed contract. Please refresh and try again.');
+    }
+
+    const params = changes
+      .map((change, index) => `value${index}: ${change.type}`)
+      .join(',\n          ');
+
+    const statements = changes
+      .map((change, index) => {
+        const fn = `update${change.name.charAt(0).toUpperCase() + change.name.slice(1)}`;
+        return `            ${contractName}.${fn}(newValue: value${index})`;
+      })
+      .join('\n');
+
+    const cadence = `
+      import ${contractName} from ${userAddress}
+
+      transaction(
+          ${params}
+      ) {
+        execute {
+${statements}
+        }
+      }
+    `;
+
+    return {
+      cadence,
+      limit: 9999,
+      args: (arg: any, t: any) =>
+        changes.map((change) => {
+          if (change.type === 'UFix64') {
+            return arg(change.value, t.UFix64);
+          }
+          if (change.type === 'UInt64') {
+            return arg(change.value, t.UInt64);
+          }
+          if (change.type === 'Address') {
+            return arg(change.value, t.Address);
+          }
+          return arg(change.value, t.String);
+        })
+    };
   };
 
   const validateVariableValue = (
@@ -519,7 +679,7 @@ export default function Dashboard() {
     varName: string,
     value: string,
     varType: string,
-    pendingMap: {[key: string]: string},
+    pendingMap: { [key: string]: string },
     field?: MetadataConfigField
   ): string | null => {
     const trimmed = value.trim();
@@ -626,12 +786,12 @@ export default function Dashboard() {
       return;
     }
 
-    const pendingMap = pendingEntries.reduce<{[key: string]: string}>((acc, [key, val]) => {
+    const pendingMap = pendingEntries.reduce<{ [key: string]: string }>((acc, [key, val]) => {
       acc[key] = (val as string).trim();
       return acc;
     }, {});
 
-    const errors: {[key: string]: string} = {};
+    const errors: { [key: string]: string } = {};
     for (const [varName, value] of pendingEntries) {
       const varType = updatableVars[workflow.workflowId]?.[varName];
       if (!varType) {
@@ -687,79 +847,97 @@ export default function Dashboard() {
     setReviewChanges([]);
   };
 
-  const submitVariableUpdates = async () => {
+  const submitVariableUpdates = () => {
     if (!reviewWorkflow || reviewChanges.length === 0) {
       closeReviewModal();
       return;
     }
 
+    if (isUserLoading) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Wallet is connecting... Please wait.'
+      });
+      return;
+    }
+
     setIsSubmittingChanges(true);
     try {
-      for (const change of reviewChanges) {
-        await handleUpdateVariable(reviewWorkflow, change.name, change.value, change.type);
-      }
-
-      setVarInputs(prev => ({
-        ...prev,
-        [reviewWorkflow.workflowId]: {}
-      }));
-      setVarErrors(prev => ({
-        ...prev,
-        [reviewWorkflow.workflowId]: {}
-      }));
-      setStatusMessage({
-        type: 'success',
-        text: 'Workflow configuration updated successfully!'
+      const transaction = buildVariableUpdateTransaction(reviewWorkflow, reviewChanges);
+      setVarTransaction(transaction);
+      setVarTransactionTarget({
+        workflowId: reviewWorkflow.workflowId,
+        workflowName: reviewWorkflow.name
       });
-      closeReviewModal();
+      setIsVarTransactionModalOpen(true);
+      setIsReviewModalOpen(false);
     } catch (error) {
       console.error('Failed to submit variable updates:', error);
       setStatusMessage({
         type: 'error',
-        text: 'Failed to update configuration.'
+        text: error instanceof Error ? error.message : 'Failed to update configuration.'
       });
     } finally {
       setIsSubmittingChanges(false);
     }
   };
 
-  const openPauseResumeModal = (workflow: WorkflowInfo, isPaused: boolean) => {
-    setConfirmState({ type: 'pause', workflow, isPaused });
-  };
-
   const openBurnModal = (workflow: WorkflowInfo) => {
+    if (isUserLoading) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Wallet is connecting... Please wait.'
+      });
+      return;
+    }
     setConfirmState({ type: 'burn', workflow });
   };
 
   const openUnlistModal = (workflow: WorkflowInfo) => {
+    if (isUserLoading) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Wallet is connecting... Please wait.'
+      });
+      return;
+    }
     setUnlistAlsoBurn(false);
     setConfirmState({ type: 'unlist', workflow });
   };
 
+  const openPriceModal = (workflow: WorkflowInfo) => {
+    if (isUserLoading) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Wallet is connecting... Please wait.'
+      });
+      return;
+    }
+    setPriceInput(workflow.price ? workflow.price.toString() : '');
+    setConfirmState({ type: 'setPrice', workflow });
+    setIsPriceModalOpen(true);
+  };
+
+  const openLockClonesModal = (workflow: WorkflowInfo) => {
+    if (isUserLoading) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Wallet is connecting... Please wait.'
+      });
+      return;
+    }
+    setConfirmState({ type: 'lockClones', workflow });
+  };
+
   const closeConfirmModal = () => {
-    if (confirmLoading) return;
     setConfirmState(null);
     setUnlistAlsoBurn(false);
   };
 
-  const handleConfirmAction = async () => {
-    if (!confirmState) return;
-    setConfirmLoading(true);
-    try {
-      if (confirmState.type === 'pause') {
-        await executePauseResume(confirmState.workflow, confirmState.isPaused || false);
-      } else if (confirmState.type === 'burn') {
-        await executeBurnWorkflow(confirmState.workflow);
-      } else if (confirmState.type === 'unlist') {
-        await executeRemoveFromRegistry(confirmState.workflow, { burnAfter: unlistAlsoBurn });
-      }
-      setConfirmState(null);
-      setUnlistAlsoBurn(false);
-    } catch (error) {
-      console.error('Failed to perform confirmation action:', error);
-    } finally {
-      setConfirmLoading(false);
-    }
+  const closePriceModal = () => {
+    setIsPriceModalOpen(false);
+    setPriceInput('');
+    setConfirmState(null);
   };
 
   const getCategoryBadgeColor = (category: string) => {
@@ -784,6 +962,52 @@ export default function Dashboard() {
     });
   };
 
+  const confirmTransactionInfo = (() => {
+    if (!confirmState) {
+      return {
+        transaction: null as TransactionConfig | null,
+        meta: null as { type: 'burn' | 'unlist' | 'lockClones'; workflowId?: number; workflowName?: string } | null,
+        error: null as string | null
+      };
+    }
+    try {
+      if (confirmState.type === 'burn') {
+        const transaction = buildBurnTransaction(confirmState.workflow);
+        const meta = {
+          type: 'burn' as const,
+          workflowId: confirmState.workflow.workflowId,
+          workflowName: confirmState.workflow.name
+        };
+        return { transaction, meta, error: null };
+      }
+      if (confirmState.type === 'unlist') {
+        const transaction = buildUnlistTransaction(confirmState.workflow, unlistAlsoBurn);
+        const meta = {
+          type: 'unlist' as const,
+          workflowId: confirmState.workflow.workflowId,
+          workflowName: confirmState.workflow.name
+        };
+        return { transaction, meta, error: null };
+      }
+      if (confirmState.type === 'lockClones') {
+        const transaction = buildLockClonesTransaction(confirmState.workflow);
+        const meta = {
+          type: 'lockClones' as const,
+          workflowId: confirmState.workflow.workflowId,
+          workflowName: confirmState.workflow.name
+        };
+        return { transaction, meta, error: null };
+      }
+      return { transaction: null, meta: null, error: 'Unsupported action.' };
+    } catch (error) {
+      return {
+        transaction: null,
+        meta: null,
+        error: error instanceof Error ? error.message : 'Failed to build transaction.'
+      };
+    }
+  })();
+
   if (!userAddress) {
     return (
       <div className="container mx-auto p-6 max-w-4xl">
@@ -804,11 +1028,10 @@ export default function Dashboard() {
     <div className="container mx-auto p-6">
       {statusMessage && (
         <div
-          className={`mb-6 rounded-md border px-4 py-3 text-sm ${
-            statusMessage.type === 'success'
-              ? 'border-green-200 bg-green-50 text-green-800'
-              : 'border-red-200 bg-red-50 text-red-800'
-          }`}
+          className={`mb-6 rounded-md border px-4 py-3 text-sm ${statusMessage.type === 'success'
+            ? 'border-green-200 bg-green-50 text-green-800'
+            : 'border-red-200 bg-red-50 text-red-800'
+            }`}
         >
           <div className="flex items-start justify-between gap-4">
             <span>{statusMessage.text}</span>
@@ -823,12 +1046,50 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">My Workflows</h1>
-        <p className="text-gray-600">View and manage your created workflows</p>
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">My Workflows</h1>
+          <p className="text-gray-600">View and manage your created workflows</p>
+        </div>
+        <Link href={`/profile/${userAddress}`}>
+          <Button variant="outline" className="gap-2">
+            <User className="w-4 h-4" />
+            View My Portfolio
+          </Button>
+        </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      {/* Profile Card with Avatar */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Your Profile</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col items-center gap-3">
+              <Avatar address={userAddress} size="md" />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                title="Image upload coming soon"
+                className="opacity-50 cursor-not-allowed"
+              >
+                Update Image
+              </Button>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-gray-600 mb-2">Wallet Address</p>
+              <p className="font-mono text-sm mb-4">{userAddress}</p>
+              <p className="text-xs text-gray-500">
+                Your generative avatar is created from your wallet address. Custom image upload coming soon.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Wallet Address</CardDescription>
@@ -848,112 +1109,247 @@ export default function Dashboard() {
             <p className="text-2xl font-bold">{myCreatedWorkflows.length}</p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>FLOW Balance</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">
+              {isFlowBalanceLoading
+                ? 'Loading…'
+                : displayFlowBalance.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 4
+                })}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Workflows You Created</CardTitle>
-          <CardDescription>Original workflows you've published to the registry</CardDescription>
+          <CardTitle>Wallet Token Vaults</CardTitle>
+          <CardDescription>Non-FLOW token balances detected in your wallet</CardDescription>
         </CardHeader>
         <CardContent>
-          {loadingCreated ? (
-            <div className="text-center py-12">
-              <p className="text-gray-600">Loading your created workflows...</p>
+          {!userAddress ? (
+            <div className="text-center py-8">
+              <p className="text-gray-600">Connect your wallet to view token balances.</p>
             </div>
-          ) : myCreatedWorkflows.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-600 mb-4">You haven't created any workflows yet</p>
-              <Button onClick={() => router.push('/create')}>
-                Create Your First Workflow
-              </Button>
+          ) : isVaultsLoading ? (
+            <div className="text-center py-8">
+              <p className="text-gray-600">Loading wallet vaults...</p>
+            </div>
+          ) : vaultsError ? (
+            <div className="text-center py-8 text-sm text-red-600">{vaultsError}</div>
+          ) : nonFlowVaults.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-600">No non-FLOW token vaults with balances detected.</p>
+              <p className="text-xs text-gray-500 mt-2">
+                Tip: Create vaults by running a ForteHub workflow or using Flow Port.
+              </p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {myCreatedWorkflows.map((workflow) => (
-                <div
-                  key={workflow.workflowId}
-                  className="border rounded-lg p-4 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-lg font-semibold">{workflow.name}</h3>
-                        <Badge className={getCategoryBadgeColor(workflow.category)}>
-                          {workflow.category}
-                        </Badge>
-                        {!workflow.isListed && (
-                          <Badge variant="outline">Unlisted</Badge>
-                        )}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {nonFlowVaults.map((vault) => {
+                const balanceNum = parseFloat(vault.balance);
+                const formatted = Number.isFinite(balanceNum)
+                  ? balanceNum.toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 4
+                  })
+                  : vault.balance;
+                return (
+                  <div
+                    key={`${vault.symbol}-${vault.path}`}
+                    className="border rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition"
+                  >
+                    <p className="font-semibold text-sm">{vault.symbol}</p>
+                    <p className="text-lg font-mono text-blue-600 my-1">{formatted}</p>
+                    <p className="text-xs text-gray-500 truncate">{vault.path}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Tabs defaultValue="created" className="mb-6">
+        <TabsList className="grid grid-cols-2 w-full md:max-w-md mb-4">
+          <TabsTrigger value="created">Created</TabsTrigger>
+          <TabsTrigger value="cloned">Cloned</TabsTrigger>
+        </TabsList>
+        <TabsContent value="created">
+          <Card>
+            <CardHeader>
+              <CardTitle>Workflows You Created</CardTitle>
+              <CardDescription>Original workflows you've published to the registry</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingCreated ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-600">Loading your created workflows...</p>
+                </div>
+              ) : myCreatedWorkflows.length === 0 ? (
+                <div className="text-center py-12 space-y-4">
+                  <p className="text-gray-600">You haven't created any workflows yet.</p>
+                  <Button onClick={() => router.push('/create')}>
+                    Create Your First Workflow
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {myCreatedWorkflows.map((workflow) => (
+                    <div
+                      key={workflow.workflowId}
+                      className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-lg font-semibold">{workflow.name}</h3>
+                            <Badge className={getCategoryBadgeColor(workflow.category)}>
+                              {workflow.category}
+                            </Badge>
+                            {!workflow.isListed && (
+                              <Badge variant="outline">Unlisted</Badge>
+                            )}
+                            {workflow.clonesLocked && (
+                              <Badge variant="destructive">Cloning Locked</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 line-clamp-2">
+                            {workflow.description}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-sm text-gray-600 line-clamp-2">
-                        {workflow.description}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3 text-sm">
-                    <div>
-                      <p className="text-gray-500">Clone Count</p>
-                      <p className="font-semibold">{workflow.cloneCount ?? 0} times</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500">Fork Count</p>
-                      <p className="font-semibold">{workflow.forkCount ?? 0} forks</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500">Type</p>
-                      <p className="font-semibold capitalize">{workflow.deploymentType}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500">Created</p>
-                      <p className="font-semibold">
-                        {new Date(workflow.createdAt * 1000).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-3 text-sm">
+                        <div>
+                          <p className="text-gray-500">Clone Count</p>
+                          <p className="font-semibold">{workflow.cloneCount ?? 0} times</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Fork Count</p>
+                          <p className="font-semibold">{workflow.forkCount ?? 0} forks</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Type</p>
+                          <p className="font-semibold capitalize">{workflow.deploymentType}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Created</p>
+                          <p className="font-semibold">
+                            {new Date(workflow.createdAt * 1000).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Clone Price</p>
+                          <p className="font-semibold text-blue-600">
+                            {workflow.price === null || workflow.price === undefined || workflow.price === '0'
+                              ? 'Free'
+                              : `${workflow.price} FLOW`}
+                          </p>
+                        </div>
+                      </div>
 
-                  {workflow.parentWorkflowId !== null && workflow.parentWorkflowId !== undefined && (
-                    <p className="text-xs text-gray-500 mb-3">
-                      Forked from workflow ID {workflow.parentWorkflowId}
-                    </p>
-                  )}
+                      {workflow.parentWorkflowId !== null && workflow.parentWorkflowId !== undefined && (
+                        <p className="text-xs text-gray-500 mb-3">
+                          Forked from workflow ID {workflow.parentWorkflowId}
+                        </p>
+                      )}
 
-                  <div className="space-y-2 pt-3 border-t">
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(`https://gateway.pinata.cloud/ipfs/${workflow.sourceCodeIPFS}`, '_blank')}
-                      >
-                        View Source
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          navigator.clipboard.writeText(workflow.sourceCodeIPFS);
-                          setStatusMessage({
-                            type: 'success',
-                            text: 'IPFS CID copied to clipboard.'
-                          });
-                        }}
-                      >
-                        Copy IPFS CID
-                      </Button>
-                    </div>
+                      <div className="pt-3 border-t space-y-3">
+                        {/* Scheduling Controls */}
+                        <SchedulingControls
+                          workflow={workflow}
+                          userAddress={userAddress}
+                          onStatusMessage={(type, text) => setStatusMessage({ type, text })}
+                          onSchedulingChanged={() => {
+                            // Trigger re-fetch of workflows to update scheduling status
+                          }}
+                        />
 
-                    {updatableVars[workflow.workflowId] && Object.keys(updatableVars[workflow.workflowId]).length > 0 && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => setExpandedWorkflowConfig(expandedWorkflowConfig === workflow.workflowId ? null : workflow.workflowId)}
-                        >
-                          {expandedWorkflowConfig === workflow.workflowId ? 'Hide Configuration' : 'Configure Variables'}
-                        </Button>
-                        {expandedWorkflowConfig === workflow.workflowId && (
-                          <div className="mt-2 p-3 bg-gray-50 rounded text-sm space-y-2">
+                        {/* Action Buttons - Compact Layout */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(`https://gateway.pinata.cloud/ipfs/${workflow.sourceCodeIPFS}`, '_blank')}
+                          >
+                            View Source
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              navigator.clipboard.writeText(workflow.sourceCodeIPFS);
+                              setStatusMessage({
+                                type: 'success',
+                                text: 'IPFS CID copied to clipboard.'
+                              });
+                            }}
+                          >
+                            Copy CID
+                          </Button>
+
+                          {updatableVars[workflow.workflowId] && Object.keys(updatableVars[workflow.workflowId]).length > 0 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setExpandedWorkflowConfig(expandedWorkflowConfig === workflow.workflowId ? null : workflow.workflowId)}
+                            >
+                              {expandedWorkflowConfig === workflow.workflowId ? 'Hide Config' : 'Config'}
+                            </Button>
+                          )}
+
+                          {workflow.isListed && (workflow.cloneCount ?? 0) === 0 && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => openUnlistModal(workflow)}
+                            >
+                              Remove
+                            </Button>
+                          )}
+
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openPriceModal(workflow)}
+                          >
+                            Set Price
+                          </Button>
+                          <Button
+                            variant={workflow.clonesLocked ? 'outline' : 'destructive'}
+                            size="sm"
+                            disabled={workflow.clonesLocked || (workflow.cloneCount ?? 0) === 0}
+                            onClick={() => openLockClonesModal(workflow)}
+                            title={(workflow.cloneCount ?? 0) === 0 ? 'Locking only available after at least one clone' : undefined}
+                          >
+                            {workflow.clonesLocked ? 'Cloning Locked' : 'Lock Cloning'}
+                          </Button>
+
+                          {myDeployedWorkflows.some(w => w.workflowId === workflow.workflowId) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedWorkflowForListing(workflow);
+                                setIsListingModalOpen(true);
+                              }}
+                            >
+                              List for Sale
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Configuration Section - Only when expanded */}
+                        {expandedWorkflowConfig === workflow.workflowId && updatableVars[workflow.workflowId] && Object.keys(updatableVars[workflow.workflowId]).length > 0 && (
+                          <div className="p-3 bg-gray-50 rounded text-sm space-y-2">
                             <p className="text-gray-600 font-semibold">Updatable Variables:</p>
                             {Object.entries(updatableVars[workflow.workflowId]).map(([varName, varType]) => {
                               const metaField = getMetadataField(workflow, varName);
@@ -1005,27 +1401,90 @@ export default function Dashboard() {
                             </Button>
                           </div>
                         )}
-                      </>
-                    )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="cloned">
 
-                    {workflow.isListed && (workflow.cloneCount ?? 0) === 0 && (
-                      <div className="flex gap-2 pt-2 border-t">
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Workflows You Cloned</CardTitle>
+              <CardDescription>Contracts deployed from the community registry</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingDeployed ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-600">Checking your deployed clones...</p>
+                </div>
+              ) : myDeployedWorkflows.length === 0 ? (
+                <div className="text-center py-12 space-y-3">
+                  <p className="text-gray-600">You haven't cloned any workflows yet.</p>
+                  <Button variant="outline" onClick={() => router.push('/discover')}>
+                    Explore Workflows
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {myDeployedWorkflows.map((workflow) => (
+                    <div key={workflow.workflowId} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-lg font-semibold">{workflow.name}</h3>
+                          <p className="text-sm text-gray-600 line-clamp-2">{workflow.description}</p>
+                        </div>
+                        <Badge className={getCategoryBadgeColor(workflow.category)}>
+                          {workflow.category}
+                        </Badge>
+                      </div>
+
+                      <div className="flex justify-end gap-2">
+                        {!workflow.metadata?.isSchedulable && (
+                          <TransactionButton
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            size="sm"
+                            label="Run Workflow"
+                            transaction={{
+                              cadence: runWorkflowTransaction,
+                              args: (arg, t) => [arg(workflow.workflowId.toString(), t.UInt64)],
+                              limit: 1000
+                            }}
+                            mutation={{
+                              onSuccess: (txId) => {
+                                setTransactionDialogTxId(txId);
+                                setIsTransactionDialogOpen(true);
+                              },
+                              onError: (error) => {
+                                console.error(error);
+                                setStatusMessage({ type: 'error', text: 'Failed to initiate workflow run' });
+                              }
+                            }}
+                          />
+                        )}
                         <Button
-                          variant="destructive"
+                          variant="outline"
                           size="sm"
-                          onClick={() => openUnlistModal(workflow)}
+                          onClick={() => {
+                            setSelectedWorkflowForListing(workflow);
+                            setIsListingModalOpen(true);
+                          }}
                         >
-                          Remove from Registry
+                          List for Sale
                         </Button>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Modal
         open={isReviewModalOpen && !!reviewWorkflow}
@@ -1069,31 +1528,100 @@ export default function Dashboard() {
       </Modal>
 
       <Modal
-        open={!!confirmState}
+        open={isVarTransactionModalOpen && Boolean(varTransaction && varTransactionTarget)}
         onClose={() => {
-          if (!confirmLoading) closeConfirmModal();
+          setIsVarTransactionModalOpen(false);
+          setVarTransaction(null);
+          setVarTransactionTarget(null);
+          setReviewWorkflow(null);
+          setReviewChanges([]);
         }}
       >
         <ModalHeader
-          title={
-            confirmState?.type === 'pause'
-              ? confirmState.isPaused
-                ? 'Resume Workflow'
-                : 'Pause Workflow'
-              : confirmState?.type === 'burn'
-              ? 'Burn Contract'
-              : 'Remove from Registry'
-          }
-          onClose={!confirmLoading ? closeConfirmModal : undefined}
+          title="Sign Configuration Update"
+          description={varTransactionTarget ? `Apply changes to ${varTransactionTarget.workflowName}` : undefined}
+          onClose={() => {
+            setIsVarTransactionModalOpen(false);
+            setVarTransaction(null);
+            setVarTransactionTarget(null);
+            setReviewWorkflow(null);
+            setReviewChanges([]);
+          }}
         />
         <ModalBody>
-          {confirmState?.type === 'pause' && confirmState.workflow && (
-            <p className="text-sm text-gray-600">
-              {confirmState.isPaused
-                ? `Resume automated execution for ${confirmState.workflow.name}.`
-                : `Pause automated execution for ${confirmState.workflow.name}. You can resume later.`}
-            </p>
+          <p className="text-sm text-gray-600 mb-3">
+            This transaction will apply {reviewChanges.length} update{reviewChanges.length === 1 ? '' : 's'} to your workflow.
+          </p>
+          {reviewChanges.length > 0 && (
+            <ul className="text-sm text-gray-700 space-y-1">
+              {reviewChanges.map((change) => (
+                <li key={change.name} className="flex justify-between gap-3">
+                  <span>{formatVarName(change.name)}</span>
+                  <span className="font-mono text-xs text-gray-500">{change.value}</span>
+                </li>
+              ))}
+            </ul>
           )}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setIsVarTransactionModalOpen(false);
+              setVarTransaction(null);
+              setVarTransactionTarget(null);
+              setReviewWorkflow(null);
+              setReviewChanges([]);
+            }}
+          >
+            Cancel
+          </Button>
+          {varTransaction && varTransactionTarget ? (
+            <TransactionButton
+              transaction={varTransaction}
+              label="Apply Changes"
+              mutation={{
+                onSuccess: (txId: string) => {
+                  beginTransactionTracking(txId, {
+                    type: 'config',
+                    workflowId: varTransactionTarget.workflowId,
+                    workflowName: varTransactionTarget.workflowName
+                  });
+                  setIsVarTransactionModalOpen(false);
+                  setVarTransaction(null);
+                  setVarTransactionTarget(null);
+                  setReviewWorkflow(null);
+                  setReviewChanges([]);
+                },
+                onError: (error: Error) => {
+                  setStatusMessage({
+                    type: 'error',
+                    text: `Failed to submit transaction: ${error.message}`
+                  });
+                }
+              }}
+            />
+          ) : (
+            <Button disabled>Apply Changes</Button>
+          )}
+        </ModalFooter>
+      </Modal>
+
+      <Modal
+        open={!!confirmState && confirmState.type !== 'setPrice'}
+        onClose={closeConfirmModal}
+      >
+        <ModalHeader
+          title={
+            confirmState?.type === 'burn'
+              ? 'Burn Contract'
+              : confirmState?.type === 'lockClones'
+                ? 'Lock Cloning'
+                : 'Remove from Registry'
+          }
+          onClose={closeConfirmModal}
+        />
+        <ModalBody>
           {confirmState?.type === 'burn' && confirmState.workflow && (
             <p className="text-sm text-gray-600">
               {`Burning "${confirmState.workflow.name}" permanently removes this contract from your account. This cannot be undone.`}
@@ -1108,23 +1636,183 @@ export default function Dashboard() {
                 <Checkbox
                   checked={unlistAlsoBurn}
                   onCheckedChange={(checked) => setUnlistAlsoBurn(checked === true)}
-                  disabled={confirmLoading}
                   id="unlist-also-burn"
                 />
                 <span>Also burn the contract from my account after unlisting</span>
               </label>
             </div>
           )}
+          {confirmState?.type === 'lockClones' && confirmState.workflow && (
+            <p className="text-sm text-gray-600">
+              {`Locking cloning for "${confirmState.workflow.name}" permanently prevents new editions. This cannot be undone.`}
+            </p>
+          )}
+          {confirmTransactionInfo.error && (
+            <p className="mt-4 text-sm text-red-600">{confirmTransactionInfo.error}</p>
+          )}
         </ModalBody>
         <ModalFooter>
-          <Button variant="outline" onClick={closeConfirmModal} disabled={confirmLoading}>
+          <Button variant="outline" onClick={closeConfirmModal}>
             Cancel
           </Button>
-          <Button onClick={handleConfirmAction} disabled={confirmLoading}>
-            {confirmLoading ? 'Working…' : confirmState?.type === 'pause' ? (confirmState.isPaused ? 'Resume' : 'Pause') : confirmState?.type === 'burn' ? 'Burn Contract' : 'Confirm Unlist'}
-          </Button>
+          {confirmTransactionInfo.transaction && confirmTransactionInfo.meta ? (
+            <TransactionButton
+              transaction={confirmTransactionInfo.transaction}
+              label={
+                confirmState?.type === 'burn'
+                  ? 'Burn Contract'
+                  : confirmState?.type === 'lockClones'
+                    ? 'Lock Cloning'
+                    : unlistAlsoBurn
+                      ? 'Unlist & Burn'
+                      : 'Confirm Unlist'
+              }
+              mutation={{
+                onSuccess: (txId: string) => {
+                  beginTransactionTracking(txId, confirmTransactionInfo.meta!);
+                  closeConfirmModal();
+                },
+                onError: (error: Error) => {
+                  setStatusMessage({
+                    type: 'error',
+                    text: `Failed to submit transaction: ${error.message}`
+                  });
+                }
+              }}
+            />
+          ) : (
+            <Button disabled>
+              {confirmState?.type === 'burn'
+                ? 'Burn Contract'
+                : confirmState?.type === 'lockClones'
+                  ? 'Lock Cloning'
+                  : 'Confirm Unlist'}
+            </Button>
+          )}
         </ModalFooter>
       </Modal>
-    </div>
+
+      <Modal
+        open={isPriceModalOpen}
+        onClose={() => {
+          setIsPriceModalOpen(false);
+          setConfirmState(null);
+          setPriceInput('');
+        }}
+      >
+        <ModalHeader
+          title="Set Clone Price"
+          description={confirmState?.workflow.name}
+          onClose={() => {
+            setIsPriceModalOpen(false);
+            setConfirmState(null);
+            setPriceInput('');
+          }}
+        />
+        <ModalBody>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Set the price in FLOW that others must pay to clone this workflow.
+            </p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Price (FLOW)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="0.0"
+                className="w-full p-2 border rounded-md"
+                value={priceInput}
+                onChange={(e) => setPriceInput(e.target.value)}
+              />
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setIsPriceModalOpen(false);
+              setConfirmState(null);
+              setPriceInput('');
+            }}
+          >
+            Cancel
+          </Button>
+          {confirmState && (
+            <TransactionButton
+              label="Update Price"
+              transaction={{
+                cadence: buildSetPriceTransaction(confirmState.workflow, priceInput).cadence,
+                args: buildSetPriceTransaction(confirmState.workflow, priceInput).args,
+                limit: 1000
+              }}
+              mutation={{
+                onSuccess: (txId) => {
+                  setTransactionDialogTxId(txId);
+                  setTransactionSuccessMeta({
+                    type: 'config',
+                    workflowId: confirmState.workflow.workflowId,
+                    workflowName: confirmState.workflow.name
+                  });
+                  setIsTransactionDialogOpen(true);
+                  setIsPriceModalOpen(false);
+                  setConfirmState(null);
+                  setPriceInput('');
+                },
+                onError: (error) => {
+                  console.error(error);
+                  setStatusMessage({ type: 'error', text: 'Transaction failed' });
+                }
+              }}
+            />
+          )}
+        </ModalFooter>
+
+      </Modal>
+
+      <ListingModal
+        open={isListingModalOpen}
+        onClose={() => {
+          setIsListingModalOpen(false);
+          setSelectedWorkflowForListing(null);
+        }}
+        workflow={selectedWorkflowForListing}
+        onListingSuccess={(txId) => {
+          setStatusMessage({ type: 'success', text: 'Listing created successfully!' });
+          setTransactionDialogTxId(txId);
+          setIsTransactionDialogOpen(true);
+          setIsListingModalOpen(false);
+          setSelectedWorkflowForListing(null);
+        }}
+      />
+
+      <TransactionDialog
+        open={isTransactionDialogOpen}
+        onOpenChange={handleTransactionDialogChange}
+        txId={transactionDialogTxId || undefined}
+        pendingTitle="Processing Transaction..."
+        pendingDescription="Waiting for Flow to seal the transaction."
+        successTitle="Transaction Successful!"
+        successDescription="Your transaction has been sealed on the blockchain."
+        closeOnSuccess={false}
+      />
+    </div >
   );
 }
+const buildLockClonesTransaction = (workflow: WorkflowInfo): TransactionConfig => ({
+  cadence: `
+      import ForteHub from ${FORTEHUB_REGISTRY}
+
+      transaction(workflowId: UInt64) {
+        prepare(signer: auth(Storage) &Account) {
+          let managerRef = signer.storage.borrow<&ForteHub.Manager>(
+            from: ForteHub.FORTEHUB_MANAGER_STORAGE
+          ) ?? panic("ForteHub Manager not initialized")
+          managerRef.lockWorkflowClones(workflowId: workflowId)
+        }
+      }
+    `,
+  limit: 9999,
+  args: (arg: any, t: any) => [arg(workflow.workflowId.toString(), t.UInt64)]
+});

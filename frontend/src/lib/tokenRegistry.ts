@@ -7,158 +7,14 @@
  * TODO: Replace with MCP calls when flow-defi-mcp is available
  */
 
-export interface TokenInfo {
-  name: string;
-  symbol: string;
-  importAddress: string;
-  importPath: string;
-  vaultType: string;
-  vaultTypeNoImport?: string; // Fallback if import not available
-  description: string;
-  networks: {
-    testnet?: string;
-    mainnet?: string;
-  };
-}
+import {
+  TOKEN_REGISTRY,
+  CORE_CONTRACTS,
+  TokenInfo,
+  CoreContractInfo
+} from '../config/tokens';
 
-export const TOKEN_REGISTRY: Record<string, TokenInfo> = {
-  FLOW: {
-    name: 'Flow Token',
-    symbol: 'FLOW',
-    importAddress: '0x1654653399040a61',
-    importPath: 'import FlowToken from 0x1654653399040a61',
-    vaultType: '@FlowToken.Vault',
-    description: 'Native Flow token - always available',
-    networks: {
-      testnet: '0x7e60df042a9c0868',
-      mainnet: '0x1654653399040a61',
-    },
-  },
-  USDC: {
-    name: 'USD Coin (stgUSDC)',
-    symbol: 'USDCFlow',
-    importAddress: '0x1e4aa0b87d10b141',
-    importPath: 'import USDCFlow from 0x1e4aa0b87d10b141',
-    vaultType: '@USDCFlow.Vault',
-    vaultTypeNoImport: '@FungibleToken.Vault',
-    description: 'USD Coin - EVM-bridged stablecoin',
-    networks: {
-      testnet: '0x64adf39cbc354fcb',
-      mainnet: '0x1e4aa0b87d10b141',
-    },
-  },
-  USDT: {
-    name: 'Tether (stgUSDT)',
-    symbol: 'USDT',
-    importAddress: '0x1e4aa0b87d10b141',
-    importPath: 'import USDT from 0x1e4aa0b87d10b141',
-    vaultType: '@USDT.Vault',
-    vaultTypeNoImport: '@FungibleToken.Vault',
-    description: 'Tether - EVM-bridged stablecoin',
-    networks: {
-      mainnet: '0x1e4aa0b87d10b141',
-    },
-  },
-  USDF: {
-    name: 'USD Flow',
-    symbol: 'USDF',
-    importAddress: '0x1e4aa0b87d10b141',
-    importPath: 'import USDF from 0x1e4aa0b87d10b141',
-    vaultType: '@USDF.Vault',
-    vaultTypeNoImport: '@FungibleToken.Vault',
-    description: 'USD Flow - EVM-bridged stablecoin',
-    networks: {
-      testnet: '0xb7ace0a920d2c37d',
-      mainnet: '0x1e4aa0b87d10b141',
-    },
-  },
-  USDCe: {
-    name: 'USD Coin (Celer)',
-    symbol: 'USDC.e',
-    importAddress: '0xf1ab99c82dee3526',
-    importPath: 'import USDCe from 0xf1ab99c82dee3526',
-    vaultType: '@USDCe.Vault',
-    vaultTypeNoImport: '@FungibleToken.Vault',
-    description: 'USDC (Celer bridge)',
-    networks: {
-      mainnet: '0xf1ab99c82dee3526',
-    },
-  },
-  stFlow: {
-    name: 'Increment Staked FLOW',
-    symbol: 'stFlow',
-    importAddress: '0xd6f80565193ad727',
-    importPath: 'import stFlow from 0xd6f80565193ad727',
-    vaultType: '@stFlow.Vault',
-    vaultTypeNoImport: '@FungibleToken.Vault',
-    description: 'Increment staked FLOW token',
-    networks: {
-      mainnet: '0xd6f80565193ad727',
-    },
-  },
-  ankrFLOW: {
-    name: 'Ankr Staked FLOW',
-    symbol: 'ankrFLOW',
-    importAddress: '0x1e4aa0b87d10b141',
-    importPath: 'import ankrFLOW from 0x1e4aa0b87d10b141',
-    vaultType: '@ankrFLOW.Vault',
-    vaultTypeNoImport: '@FungibleToken.Vault',
-    description: 'Ankr staked FLOW token',
-    networks: {
-      mainnet: '0x1e4aa0b87d10b141',
-    },
-  },
-  MOET: {
-    name: 'MOET Token',
-    symbol: 'MOET',
-    importAddress: '0xd27920b6384e2a78',
-    importPath: 'import MOET from 0xd27920b6384e2a78',
-    vaultType: '@MOET.Vault',
-    vaultTypeNoImport: '@FungibleToken.Vault',
-    description: 'MOET token',
-    networks: {
-      testnet: '0xd27920b6384e2a78',
-    },
-  },
-  WETH: {
-    name: 'Wrapped Ethereum',
-    symbol: 'WETH',
-    importAddress: '0x1e4aa0b87d10b141',
-    importPath: 'import WETH from 0x1e4aa0b87d10b141',
-    vaultType: '@WETH.Vault',
-    vaultTypeNoImport: '@FungibleToken.Vault',
-    description: 'Wrapped Ethereum - EVM-bridged',
-    networks: {
-      testnet: '0xdfc20aee650fcbdf',
-      mainnet: '0x1e4aa0b87d10b141',
-    },
-  },
-  WBTC: {
-    name: 'Wrapped Bitcoin',
-    symbol: 'WBTC',
-    importAddress: '0xdfc20aee650fcbdf',
-    importPath: 'import WBTC from 0xdfc20aee650fcbdf',
-    vaultType: '@WBTC.Vault',
-    vaultTypeNoImport: '@FungibleToken.Vault',
-    description: 'Wrapped Bitcoin - EVM-bridged',
-    networks: {
-      testnet: '0xdfc20aee650fcbdf',
-    },
-  },
-  cbBTC: {
-    name: 'Coinbase Bitcoin',
-    symbol: 'cbBTC',
-    importAddress: '0x1e4aa0b87d10b141',
-    importPath: 'import cbBTC from 0x1e4aa0b87d10b141',
-    vaultType: '@cbBTC.Vault',
-    vaultTypeNoImport: '@FungibleToken.Vault',
-    description: 'Coinbase Bitcoin - EVM-bridged',
-    networks: {
-      testnet: '0xdfc20aee650fcbdf',
-      mainnet: '0x1e4aa0b87d10b141',
-    },
-  },
-};
+export type { TokenInfo, CoreContractInfo };
 
 /**
  * Extract mentioned tokens from user description
@@ -177,6 +33,13 @@ export function detectTokensInDescription(description: string): TokenInfo[] {
   // Special case: map user input "USDC" to "USDCFlow" token
   if (descLower.includes('usdc')) {
     mentionedTokens.push(TOKEN_REGISTRY.USDC);
+  }
+
+  // Map generic BTC mentions to WBTC (default wrapped Bitcoin available on Flow)
+  if (/\bbtc\b/.test(descLower) || descLower.includes('bitcoin')) {
+    if (!mentionedTokens.find((token) => token.symbol === TOKEN_REGISTRY.WBTC.symbol)) {
+      mentionedTokens.push(TOKEN_REGISTRY.WBTC);
+    }
   }
 
   // Then check for explicitly mentioned tokens (USDT, USDF, stFlow, etc)
@@ -207,7 +70,8 @@ export function detectTokensInDescription(description: string): TokenInfo[] {
  * Get the correct address for a token on a specific network
  */
 export function getTokenAddressForNetwork(token: TokenInfo, network: string = 'testnet'): string {
-  const address = token.networks[network] || token.networks.mainnet || token.importAddress;
+  const netKey = network as keyof typeof token.networks;
+  const address = token.networks[netKey] || token.networks.mainnet || token.importAddress;
   return address;
 }
 
@@ -269,6 +133,14 @@ export function getAllImportsForTokens(tokens: TokenInfo[], network: string = 't
   const baseImports = `import FungibleToken from ${addresses.FungibleToken}
 import FlowToken from ${addresses.FlowToken}`;
 
+  const connectorImports = CORE_CONTRACTS.map((contract) => {
+    const address = contract.networks[network as 'testnet' | 'mainnet'];
+    if (!address) {
+      return null;
+    }
+    return `import ${contract.name} from ${address}`;
+  }).filter((line): line is string => Boolean(line));
+
   // Additional token imports (beyond FLOW)
   const tokenImports = tokens
     .filter((t) => t.symbol !== 'FLOW') // FLOW already in base
@@ -278,5 +150,34 @@ import FlowToken from ${addresses.FlowToken}`;
     })
     .join('\n');
 
-  return tokenImports ? `${baseImports}\n${tokenImports}` : baseImports;
+  const sections = [baseImports];
+  if (connectorImports.length > 0) {
+    sections.push(connectorImports.join('\n'));
+  }
+  if (tokenImports) {
+    sections.push(tokenImports);
+  }
+
+  return sections.join('\n');
+}
+
+export function generateCoreContractReference(network: string = 'testnet'): string {
+  const lines: string[] = [];
+  lines.push('Name | Address | Notes');
+  lines.push('---|---|---');
+
+  CORE_CONTRACTS.forEach((contract) => {
+    const address = contract.networks[network as 'testnet' | 'mainnet'];
+    if (!address) {
+      return;
+    }
+    const note = contract.description ? contract.description : '';
+    lines.push(`${contract.name} | ${address} | ${note}`);
+  });
+
+  if (lines.length <= 2) {
+    return '';
+  }
+
+  return lines.join('\n');
 }

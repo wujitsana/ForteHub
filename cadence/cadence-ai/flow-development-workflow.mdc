@@ -88,7 +88,7 @@ pub fun main(): {String: String} {
 - **Unknown Member Errors**: Verify contract deployment, check that the member is public in the *deployed* contract, and ensure frontend FCL is configured with the correct contract address and network.
 - **"transaction failed to decode"**: Often due to FCL configuration issues (network mismatch, incorrect address for imports) or transaction syntax errors.
 - **Computation Limit Exceeded**: Optimize Cadence code (see "Optimizing for Computation Limits"), reduce transaction scope, or process in batches.
-- **FCL Errors**: Use browser developer tools (console, network tab) to inspect FCL requests and responses. Check FCL configuration (`accessNode.api`, `discovery.wallet`).
+- **FCL Errors**: Use discoverr developer tools (console, network tab) to inspect FCL requests and responses. Check FCL configuration (`accessNode.api`, `discovery.wallet`).
 
 ## Frontend (FCL) Integration Best Practices
 - **Network Configuration**: Ensure frontend FCL configuration (`config.js` or equivalent) explicitly sets the correct `accessNode.api` and `discovery.wallet` for the target network (emulator, testnet, mainnet). Mismatches are a common source of errors.
@@ -316,7 +316,7 @@ The following Cadence code illustrates the 'Accumulative Periodic Processing' pr
     3.  Testing under simulated conditions of expected load (e.g., batch minting scripts, concurrent transactions if testable).
     4.  Verification of all contract-emitted events, their expected payloads, and indexing by any off-chain services.
     5.  Security audit or peer review, focusing on Testnet-deployed code and potential attack vectors.
-    6.  Confirmation of correct FCL integration and UI/UX behavior with Testnet contracts across different browsers/devices.
+    6.  Confirmation of correct FCL integration and UI/UX behavior with Testnet contracts across different discoverrs/devices.
     7.  A detailed, step-by-step deployment checklist for Mainnet, including `flow.json` updates for Mainnet addresses, signer account readiness, and rollback plans.
     8.  Ensure a separate, clean, and stable Testnet environment for these validation cycles if the primary Testnet is too volatile or cluttered.
 - **Why**: Testnet is the closest environment to Mainnet. Comprehensive validation here is crucial for catching subtle bugs, integration issues, performance bottlenecks, gas limit surprises, and security oversights that might not be apparent during emulator testing. This minimizes risks associated with Mainnet deployment.
@@ -413,7 +413,7 @@ pub fun main(): {String: String} {
 - **Unknown Member Errors**: Verify contract deployment, check that the member is public in the *deployed* contract, and ensure frontend FCL is configured with the correct contract address and network.
 - **"transaction failed to decode"**: Often due to FCL configuration issues (network mismatch, incorrect address for imports) or transaction syntax errors.
 - **Computation Limit Exceeded**: Optimize Cadence code (see "Optimizing for Computation Limits"), reduce transaction scope, or process in batches.
-- **FCL Errors**: Use browser developer tools (console, network tab) to inspect FCL requests and responses. Check FCL configuration (`accessNode.api`, `discovery.wallet`).
+- **FCL Errors**: Use discoverr developer tools (console, network tab) to inspect FCL requests and responses. Check FCL configuration (`accessNode.api`, `discovery.wallet`).
 
 ## Frontend (FCL) Integration Best Practices
 - **Network Configuration**: Ensure frontend FCL configuration (`config.js` or equivalent) explicitly sets the correct `accessNode.api` and `discovery.wallet` for the target network (emulator, testnet, mainnet). Mismatches are a common source of errors.
@@ -641,7 +641,7 @@ The following Cadence code illustrates the 'Accumulative Periodic Processing' pr
     3.  Testing under simulated conditions of expected load (e.g., batch minting scripts, concurrent transactions if testable).
     4.  Verification of all contract-emitted events, their expected payloads, and indexing by any off-chain services.
     5.  Security audit or peer review, focusing on Testnet-deployed code and potential attack vectors.
-    6.  Confirmation of correct FCL integration and UI/UX behavior with Testnet contracts across different browsers/devices.
+    6.  Confirmation of correct FCL integration and UI/UX behavior with Testnet contracts across different discoverrs/devices.
     7.  A detailed, step-by-step deployment checklist for Mainnet, including `flow.json` updates for Mainnet addresses, signer account readiness, and rollback plans.
     8.  Ensure a separate, clean, and stable Testnet environment for these validation cycles if the primary Testnet is too volatile or cluttered.
 - **Why**: Testnet is the closest environment to Mainnet. Comprehensive validation here is crucial for catching subtle bugs, integration issues, performance bottlenecks, gas limit surprises, and security oversights that might not be apparent during emulator testing. This minimizes risks associated with Mainnet deployment.

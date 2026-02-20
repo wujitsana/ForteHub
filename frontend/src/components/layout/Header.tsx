@@ -25,6 +25,13 @@ export function Header() {
               </span>
             </Link>
 
+            {/* Network Indicator */}
+            {(process.env.NEXT_PUBLIC_FLOW_NETWORK === 'testnet' || process.env.NEXT_PUBLIC_FLOW_NETWORK === 'emulator') && (
+              <div className="ml-3 px-2 py-0.5 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-xs font-medium text-yellow-500">
+                {process.env.NEXT_PUBLIC_FLOW_NETWORK === 'testnet' ? 'Testnet' : 'Emulator'}
+              </div>
+            )}
+
             {/* Mobile Menu Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -38,10 +45,16 @@ export function Header() {
               {/* Nav Links */}
               <nav className="flex items-center gap-6">
                 <Link
-                  href="/browse"
+                  href="/discover"
                   className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
                 >
-                  Browse
+                  Discover
+                </Link>
+                <Link
+                  href="/marketplace"
+                  className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
+                >
+                  Marketplace
                 </Link>
                 <Link
                   href="/create"
@@ -74,11 +87,18 @@ export function Header() {
         <nav className="md:hidden bg-background border-b border-border sticky top-[57px] z-40">
           <div className="max-w-7xl mx-auto px-4 py-4 space-y-3">
             <Link
-              href="/browse"
+              href="/discover"
               className="block text-muted-foreground hover:text-foreground transition-colors text-sm py-2"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Browse
+              Discover
+            </Link>
+            <Link
+              href="/marketplace"
+              className="block text-muted-foreground hover:text-foreground transition-colors text-sm py-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Marketplace
             </Link>
             <Link
               href="/create"
